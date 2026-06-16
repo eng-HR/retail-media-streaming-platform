@@ -24,13 +24,15 @@ public class ErrorHandlingMiddleware
         {
             _logger.LogWarning(ex, "Validation error");
             context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-            await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { error = ex.Message }));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception");
             context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-            await context.Response.WriteAsJsonAsync(new { error = "An unexpected error occurred" });
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { error = "An unexpected error occurred" }));
         }
     }
 }

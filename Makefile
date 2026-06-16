@@ -1,4 +1,4 @@
-DOTNET := $(HOME)/.dotnet/dotnet
+DOTNET := dotnet
 
 .PHONY: build test run clean dev docker-up docker-down
 
@@ -45,4 +45,8 @@ lint:
 coverage:
 	$(DOTNET) test --collect:"XPlat Code Coverage" --results-directory:TestResults
 
-.PHONY: build test run-api run-processor run-collector dev docker-up docker-down clean restore lint coverage
+coverage-report: coverage
+	dotnet tool install -g dotnet-reportgenerator-globaltool 2>/dev/null || true
+	reportgenerator "-reports:TestResults/**/coverage.cobertura.xml" "-targetdir:coveragereport" -reporttypes:Html
+
+.PHONY: build test run-api run-processor run-collector dev docker-up docker-down clean restore lint coverage coverage-report

@@ -36,7 +36,7 @@ public class RedisCache : IRedisCache, IDisposable
     public async Task<T?> GetAsync<T>(string key)
     {
         var json = await _db.StringGetAsync(key);
-        return json.HasValue ? JsonSerializer.Deserialize<T>(json!) : default;
+        return json.HasValue ? JsonSerializer.Deserialize<T>((string)json!) : default;
     }
 
     public async Task<bool> KeyExistsAsync(string key) =>

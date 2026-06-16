@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using RetailMedia.Application.Interfaces;
 using RetailMedia.Domain.ValueObjects;
 
@@ -23,7 +24,8 @@ public class TenantContextMiddleware
         if (tenantId == null)
         {
             context.Response.StatusCode = 401;
-            await context.Response.WriteAsJsonAsync(new { error = "TenantId is required" });
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { error = "TenantId is required" }));
             return;
         }
 

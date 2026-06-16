@@ -1,3 +1,4 @@
+using System.Globalization;
 using RetailMedia.Domain.Entities;
 using RetailMedia.Domain.Interfaces;
 
@@ -35,7 +36,7 @@ public class AttributionHandler
 
         if (session == null) return;
 
-        if (!DateTime.TryParse(session["timestamp"], out var clickTime)) return;
+        if (!DateTime.TryParse(session["timestamp"], CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var clickTime)) return;
         if (DateTime.UtcNow - clickTime > AttributionWindow)
         {
             _logger.LogInformation("Attribution window expired for user {UserId}", @event.UserId);
