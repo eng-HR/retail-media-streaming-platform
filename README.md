@@ -1,6 +1,29 @@
 # Retail Media Streaming Platform
 
-Real-time Retail Media platform for processing ad engagement events and generating campaign insights at scale. Built for the Technical Leadership Round — Architect interview assignment.
+Real-time platform for processing ad engagement events and generating campaign insights at scale. Built for the Technical Leadership Round — Architect interview assignment.
+
+---
+
+## Table of Contents
+
+- [System Design](#system-design)
+- [Architecture Principles](#architecture-principles)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Event Ingestion & Schema](#event-ingestion--schema)
+- [Data Processing Pipeline](#data-processing-pipeline)
+- [Data Storage Strategy](#data-storage-strategy)
+- [Insights API](#insights-api)
+- [Multi-Tenancy](#multi-tenancy)
+- [Scalability](#scalability)
+- [Deployment](#deployment)
+- [Monitoring & Observability](#monitoring--observability)
+- [Challenges & Trade-offs](#challenges--trade-offs)
+- [Cost Optimization](#cost-optimization)
+- [Running Locally](#running-locally)
+- [Future Enhancements](#future-enhancements)
+
+---
 
 ## System Design
 
@@ -19,86 +42,140 @@ graph TD
     H -->|GET /ad/:id/metrics| I
 ```
 
-## Architecture
+**Three services, three infrastructure dependencies:**
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                 API Gateway / Ingress                │
-├──────────────────────┬──────────────────────────────┤
-│   Insights API       │   Event Collector             │
-│   Port 5000          │   Port 5001                   │
-│   Minimal API .NET 8 │   POST /events → Kafka        │
-├──────────────────────┴──────────────────────────────┤
-│              Kafka (raw-events topic)                │
-├─────────────────────────────────────────────────────┤
-│           Stream Processor (Background Service)      │
-│  ┌──────────┐  ┌───────────┐  ┌──────────────────┐  │
-│  │  Click   │  │Impression │  │  Attribution     │  │
-│  │  Handler │  │  Handler  │  │  Handler         │  │
-│  └────┬─────┘  └────┬──────┘  └───────┬──────────┘  │
-│       └──────────────┼────────────────┘              │
-│                      ▼                               │
-│  ┌──────────────────────────────────────┐            │
-│  │          Redis Cache                  │            │
-│  │  campaign:{id}:clicks                │            │
-│  │  campaign:{id}:impressions           │            │
-│  │  campaign:{id}:clickToBasket         │            │
-│  │  session:{tenant}:{user} (TTL)       │            │
-│  └──────────────────┬───────────────────┘            │
-│                     ▼                                 │
-│  ┌──────────────────────────────────────┐            │
-│  │        PostgreSQL                     │            │
-│  │  campaigns, events, campaign_metrics  │            │
-│  └──────────────────────────────────────┘            │
-└─────────────────────────────────────────────────────┘
+                     ┌──────────────┐     ┌──────────────┐
+                     │ EventCollector│────▶│    Kafka     │
+                     │  POST /events │     │ raw-events   │
+                     │  Port 5001    │     └──────┬───────┘
+                     └──────────────┘            │
+                                                 ▼
+                     ┌──────────────┐     ┌──────────────┐
+                     │  Insights API│     │StreamProcessor│
+                     │  Port 5000   │     │  Background   │
+                     │  .NET 8      │     │  Worker .NET  │
+                     └──────┬───────┘     └──────┬───────┘
+                            │                    │
+                     ┌──────┴──────┐      ┌──────┴──────┐
+                     │  PostgreSQL │      │    Redis     │
+                     │  Metrics    │      │  Counters +  │
+                     │  + Entities │      │  Sessions    │
+                     └─────────────┘      └─────────────┘
 ```
 
-## Tech Stack
+---
 
-| Layer | Technology |
-|-------|-----------|
-| API | .NET 8 Minimal API |
-| Stream Processing | .NET 8 Background Service |
-| Event Bus | Kafka (Confluent.Kafka) |
-| Cache | Redis (StackExchange.Redis) |
-| Database | PostgreSQL (EF Core + Dapper) |
-| Container | Docker + docker-compose |
-| Orchestration | Kubernetes |
-| CI/CD | GitHub Actions |
-| Testing | xUnit + Moq + TestServer |
+## Architecture Principles
+
+The codebase follows **Clean Architecture** (Ports & Adapters) with 4 layers:
+
+```
+┌──────────────────────────────────────────────────────┐
+│  RetailMedia.Api          (Web API / Presentation)    │
+│  RetailMedia.EventCollector (Web API / Event Ingress) │
+│  RetailMedia.StreamProcessor (Worker / Event Egress)  │
+├──────────────────────────────────────────────────────┤
+│  RetailMedia.Application    (Use Cases / Services)    │
+├──────────────────────────────────────────────────────┤
+│  RetailMedia.Infrastructure (Persistence, Caching,    │
+│                              Messaging, EF Migrations) │
+├──────────────────────────────────────────────────────┤
+│  RetailMedia.Domain         (Entities, Value Objects,  │
+│                              Repository Interfaces)    │
+└──────────────────────────────────────────────────────┘
+```
+
+**Dependency Rule:** Dependencies point inward. Domain has zero external dependencies.
+
+**SOLID in practice:**
+- **Single Responsibility** — One handler per event type (ClickHandler, ImpressionHandler, AttributionHandler)
+- **Open/Closed** — New event types = new handler class; no modification to existing domain logic
+- **Dependency Inversion** — Domain defines interfaces (ports), Infrastructure implements them (adapters)
+- **Interface Segregation** — Separate repository interfaces per aggregate (ICampaignRepository, IEventRepository, IMetricsRepository)
+
+---
+
+## Technology Stack
+
+| Layer | Technology | Rationale |
+|-------|-----------|-----------|
+| **API Framework** | .NET 8 Minimal API | Less ceremony than MVC, full DI + middleware support |
+| **Stream Processing** | .NET 8 Background Service | Same conceptual model as Flink (consume → process → state → sink), no cluster overhead |
+| **Event Bus** | Apache Kafka (Confluent.Kafka) | Durable, replayable, partitioned — industry standard |
+| **Cache** | Redis (StackExchange.Redis) | Atomic INCR, TTL-based sessions, sub-millisecond reads |
+| **Database** | PostgreSQL (EF Core + Dapper) | Strong consistency, relational model, migrations built-in |
+| **Container** | Docker + docker-compose | Local dev parity with production |
+| **Orchestration** | Kubernetes (Kustomize) | HPA, self-healing, rolling updates |
+| **CI/CD** | GitHub Actions | Build → test → docker → deploy |
+| **Testing** | xUnit + Moq | Unit + integration test support |
+
+---
 
 ## Project Structure
 
 ```
 src/
-├── RetailMedia.Api/                  # Minimal API host (port 5000)
-│   ├── Program.cs                    # Entry point, DI, middleware
-│   ├── Endpoints/                    # Campaign endpoints
-│   └── Middleware/                   # Tenant + error handling
-├── RetailMedia.Domain/               # Entities, value objects, interfaces
-├── RetailMedia.Application/          # Services, DTOs, use cases
-├── RetailMedia.Infrastructure/       # PostgreSQL, Redis, Kafka implementations
-├── RetailMedia.StreamProcessor/      # Kafka consumer workers
-└── RetailMedia.EventCollector/       # Event ingestion service (port 5001)
+├── RetailMedia.Domain/               # Layer 0: Entities, Value Objects, Interfaces
+│   ├── Entities/                     # Campaign, Event, CampaignMetric
+│   ├── ValueObjects/                 # CampaignId, TenantId, EventType (enum)
+│   └── Interfaces/                   # ICampaignRepository, IEventRepository, etc.
+│
+├── RetailMedia.Application/          # Layer 1: Use cases, DTOs
+│   ├── Services/                     # EventIngestionService, InsightsService
+│   ├── DTOs/                         # IngestEventRequest, MetricsResponse, etc.
+│   └── Interfaces/                   # IEventIngestionService, IInsightsService
+│
+├── RetailMedia.Infrastructure/       # Layer 2: Adapters
+│   ├── Persistence/                  # AppDbContext, Repositories, Migrations
+│   ├── Caching/                      # RedisCache
+│   └── Messaging/                    # KafkaProducer
+│
+├── RetailMedia.Api/                  # Layer 3a: Insights API (port 5000)
+│   ├── Endpoints/                    # CampaignEndpoints
+│   └── Middleware/                   # TenantContext, ErrorHandling
+│
+├── RetailMedia.EventCollector/       # Layer 3b: Event Ingestion (port 5001)
+│   └── Endpoints/                    # EventEndpoints
+│
+└── RetailMedia.StreamProcessor/      # Layer 3c: Background Worker
+    ├── Handlers/                     # ClickHandler, ImpressionHandler, AttributionHandler
+    ├── KafkaEventConsumer.cs
+    └── RedisFlushService.cs
+
+tests/
+├── RetailMedia.Api.Tests/
+├── RetailMedia.Application.Tests/
+└── RetailMedia.StreamProcessor.Tests/
+
+k8s/                                  # Kubernetes manifests (Kustomize)
+├── api-deployment.yaml               # 3 replicas, HPA-aware, liveness/readiness probes
+├── api-hpa.yaml                      # HPA: 3-20 replicas, CPU 70%, Memory 80%
+├── processor-deployment.yaml         # 2 replicas
+└── configmap.yaml
+
+.github/workflows/
+├── ci.yml                            # Build, test with Postgres/Redis, docker build
+└── cd.yml                            # Build, test, push to GCR, deploy to GKE
 ```
 
-## API Endpoints
+---
 
-### Campaign Insights
+## Event Ingestion & Schema
 
-```
-GET /ad/{campaignId}/clicks         → Click count
-GET /ad/{campaignId}/impressions    → Impression count
-GET /ad/{campaignId}/clickToBasket  → Attributed add-to-cart count
-GET /ad/{campaignId}/metrics?metric=clicks&startDate=2026-01-01&endDate=2026-01-31
-```
+### Event Types
 
-### Event Ingestion
+| Event Type | Description | Handled? |
+|-----------|-------------|----------|
+| `AdImpression` | User viewed an ad | ✅ ImpressionHandler |
+| `AdClick` | User clicked an ad | ✅ ClickHandler + AttributionHandler |
+| `AddToCart` | User added item to cart | ✅ AttributionHandler (attribution check) |
+| `ProductView` | User viewed a product page | ❌ Default (no-op) |
+| `Purchase` | User completed a purchase | ❌ Default (no-op) |
 
-```
-POST /events
-Content-Type: application/json
+### Event Schema
 
+```json
 {
   "eventId": "evt_001",
   "tenantId": "tesco",
@@ -106,35 +183,397 @@ Content-Type: application/json
   "campaignId": "cmp_789",
   "eventType": "AD_CLICK",
   "timestamp": "2026-06-16T10:00:00Z",
-  "metadata": { "productId": "prod_123", "source": "homepage_banner" }
+  "metadata": {
+    "productId": "prod_123",
+    "source": "homepage_banner"
+  }
 }
 ```
 
-### Health
+### Ingestion Flow
 
 ```
-GET /healthz    → Health check
+Client → POST /events → EventCollector → validate → KafkaProducer → Kafka (raw-events)
+         (202 Accepted)                                              (topic)
 ```
 
-All insight endpoints require `X-Tenant-Id` header or JWT `tenantId` claim.
+- **Kafka partitioning key:** `{tenantId}:{campaignId}` — ordering guarantee per campaign
+- **Client response:** 202 Accepted (fire-and-forget, no wait for processing)
+- **Error handling:** Invalid EventType → 400 Bad Request; Kafka failures → error logged, client gets 202 (event not guaranteed — add retry for production)
+
+---
+
+## Data Processing Pipeline
+
+```mermaid
+sequenceDiagram
+    participant K as Kafka (raw-events)
+    participant KC as KafkaEventConsumer
+    participant H as Handler
+    participant R as Redis
+    participant P as PostgreSQL
+
+    K->>KC: Consume message
+    KC->>KC: Deserialize JSON → Domain Event
+    KC->>KC: Route by EventType
+
+    alt AdImpression
+        KC->>H: ImpressionHandler
+        H->>R: INCR campaign:{id}:impressions
+    else AdClick
+        KC->>H: ClickHandler
+        H->>R: INCR campaign:{id}:clicks
+        KC->>H: AttributionHandler.HandleClick
+        H->>R: SETEX session:{tenant}:{user} (30 min TTL)
+    else AddToCart
+        KC->>H: AttributionHandler.HandleAddToCart
+        H->>R: GET session:{tenant}:{user}
+        alt Session exists & within 30 min
+            H->>R: INCR campaign:{id}:clickToBasket
+        end
+    end
+```
+
+### Attribution Model
+
+**Last-click attribution** with a 30-minute session window:
+
+1. User clicks ad → Redis stores `session:{tenant}:{user}` with campaign ID + timestamp (TTL = 30 min)
+2. User adds item to cart → Redis checks for existing session
+3. If session exists and is within 30 min → increment `clickToBasket` counter
+4. If no session or window expired → no attribution (silent no-op)
+
+### Consumer Configuration
+
+| Parameter | Value | Why |
+|-----------|-------|-----|
+| `GroupId` | `retail-media-processor` | Consumer group for horizontal scaling |
+| `AutoOffsetReset` | `Earliest` | Process all events from start on first run |
+| `EnableAutoCommit` | `false` | Manual commit — at-least-once delivery |
+
+---
+
+## Data Storage Strategy
+
+### Layer 1: Redis (Real-time Counters & Sessions)
+
+```
+Key Pattern                          Example
+─────────────────────────────────────────────────────
+campaign:{campaignId}:clicks         campaign:cmp-789:clicks
+campaign:{campaignId}:impressions    campaign:cmp-789:impressions
+campaign:{campaignId}:clickToBasket  campaign:cmp-789:clickToBasket
+session:{tenantId}:{userId}          session:tesco:u_456  (TTL: 1800s)
+```
+
+**Operations:** INCR for counters, GETSET for atomic read-and-reset, SETEX for session TTL.
+
+### Layer 2: PostgreSQL (Persisted Metrics & Entities)
+
+**Schema (3 tables):**
+
+```
+Campaigns
+├── Id (text PK)          — CampaignId value object stored as string
+├── TenantId (text)       — TenantId value object stored as string
+├── Name (varchar 256)
+├── IsActive (bool)
+├── CreatedAt, UpdatedAt (timestamps)
+└── Index: (TenantId, Id)
+
+Events
+├── EventId (varchar 128 PK)
+├── TenantId (text)
+├── UserId (varchar 128)
+├── CampaignId (text)
+├── Type (varchar 32)     — EventType enum stored as string
+├── Timestamp
+├── Metadata (jsonb)
+└── Index: (TenantId, CampaignId, Timestamp)
+
+CampaignMetrics
+├── Id (bigint PK, auto)
+├── TenantId (text)
+├── CampaignId (text)
+├── Metric (varchar 32)   — MetricType enum stored as string
+├── Count (bigint)
+├── Date (date)
+└── Index: (TenantId, CampaignId, Metric, Date)
+```
+
+### Read Strategy (Cache-Aside)
+
+```
+API Request
+    │
+    ├── Redis GET → real-time counter value
+    │
+    └── PostgreSQL SUM → persisted aggregate value
+              │
+         Combined = Redis + PostgreSQL
+              │
+         Response: { data: { clicks: combined }, meta }
+```
+
+Redis gives sub-millisecond reads for real-time counters. PostgreSQL provides durable storage with historical data. The `/metrics` endpoint additionally supports date-range filtering via EF Core.
+
+---
+
+## Insights API
+
+### Endpoints
+
+| Method | Path | Description | Real-time? |
+|--------|------|-------------|------------|
+| `GET` | `/ad/{campaignId}/clicks` | Click count for campaign | ✅ Redis + PostgreSQL |
+| `GET` | `/ad/{campaignId}/impressions` | Impression count | ✅ Redis + PostgreSQL |
+| `GET` | `/ad/{campaignId}/clickToBasket` | Attributed add-to-cart count | ✅ Redis + PostgreSQL |
+| `GET` | `/ad/{campaignId}/metrics` | Unified metrics with date filters | ⚠️ PostgreSQL only |
+| `POST` | `/events` | Ingest engagement event | N/A (ingestion) |
+| `GET` | `/healthz` | Health check | N/A |
+
+### Metrics Query Parameters
+
+```
+GET /ad/{campaignId}/metrics?metric=clicks&startDate=2026-01-01&endDate=2026-01-31
+```
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `metric` | string | Filter: `clicks`, `impressions`, `clicktobasket` (optional) |
+| `startDate` | date | Inclusive start (optional) |
+| `endDate` | date | Inclusive end (optional) |
+
+### Response Format
+
+All endpoints return a consistent JSON envelope:
+
+```json
+{
+  "data": {
+    "campaignId": "cmp_789",
+    "clicks": 1542,
+    "impressions": 45000,
+    "clickToBasket": 89,
+    "startDate": "2026-01-01",
+    "endDate": "2026-01-31"
+  },
+  "meta": {
+    "timestamp": "2026-06-16T12:00:00Z"
+  }
+}
+```
+
+---
 
 ## Multi-Tenancy
 
-- Tenant identified via `X-Tenant-Id` header or JWT claim `tenantId`
-- All database queries filtered by `tenant_id`
-- Logical isolation within shared infrastructure
-- Scoped `ITenantContext` per request
+### Strategy
 
-## Event Processing Pipeline
+**Shared infrastructure with logical isolation** via `tenantId` column on every table.
 
-1. **Event Collector**: Validates event schema, publishes to Kafka topic `raw-events`
-2. **Kafka Partitioning**: Keyed by `tenantId:campaigntId` for ordering per campaign
-3. **Stream Processor**: Consumes from Kafka, routes by event type:
-   - `AD_CLICK` → ClickHandler (increment Redis + AttributionHandler)
-   - `AD_IMPRESSION` → ImpressionHandler (increment Redis)
-   - `ADD_TO_CART` → AttributionHandler (check session window)
-4. **Attribution Window**: 30-minute session stored in Redis hash, tracks last-clicked campaign
-5. **Cache-Aside**: API reads check Redis first, fall back to PostgreSQL; sum counts
+### Tenant Resolution
+
+1. JWT claim `tenantId` (preferred — for authenticated requests)
+2. `X-Tenant-Id` header (fallback — for API key auth)
+3. Returns **401 Unauthorized** if no tenant found
+
+### Implementation
+
+```csharp
+// TenantContextMiddleware extracts tenant from request
+// TenantContext (scoped per request) stores CurrentTenantId
+// All repository queries filter by TenantId:
+_db.Campaigns.Where(c => c.TenantId == tenantId && c.Id == campaignId)
+```
+
+### Data Isolation
+
+| Concern | Approach |
+|---------|----------|
+| **Storage** | Shared DB, all tables have `TenantId` column |
+| **Queries** | Every repository method filters by `TenantId` |
+| **Caching** | Redis keys prefixed with tenant context |
+| **Auth** | JWT validation ensures tenant matches token |
+| **Enterprise tenants** | Dedicated DB per tenant if needed (design supports migration) |
+
+---
+
+## Scalability
+
+### Strategy
+
+Three-layer scaling — let Kafka absorb spikes, auto-scale stateless services, partition for parallelism.
+
+### Kafka Partitioning
+
+```
+Partition key: {tenantId}:{campaignId}
+Benefits:
+  • Ordering guarantee per campaign (all events for campaign → same partition)
+  • Even distribution across partitions (campaign spread)
+  • Horizontal scalability (add partitions → add consumers)
+```
+
+### Horizontal Scaling
+
+| Service | Strategy | Notes |
+|---------|----------|-------|
+| **EventCollector** | Stateless HTTP — add replicas behind load balancer | No session affinity needed |
+| **StreamProcessor** | Kafka consumer group — add consumers as partitions increase | At most one consumer per partition |
+| **RetailMedia.Api** | K8s HPA — CPU 70% / Memory 80% | 3-20 replicas configured |
+
+### Kubernetes Autoscaling
+
+```yaml
+# api-hpa.yaml
+minReplicas: 3
+maxReplicas: 20
+metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+```
+
+### Load Balancing
+
+- **External:** Cloud load balancer → K8s Service → Pods
+- **Kafka:** Partitions distributed across brokers; consumers within group balance partitions automatically
+- **Read replicas:** PostgreSQL read replicas serve API queries; writes go to primary
+
+---
+
+## Deployment
+
+### Kubernetes Topology
+
+```
+                    ┌──────────────────────┐
+                    │   Cloud Load Balancer │
+                    └──────────┬───────────┘
+                               │
+                    ┌──────────┴───────────┐
+                    │   Ingress / Gateway   │
+                    │   (Traefik/nginx)     │
+                    └──────────┬───────────┘
+                               │
+         ┌─────────────────────┼─────────────────────┐
+         │                     │                     │
+         ▼                     ▼                     ▼
+┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+│  EventCollector │   │  RetailMedia.Api│   │StreamProcessor  │
+│  Deployment     │   │  Deployment     │   │  Deployment     │
+│  Replicas: 2-10 │   │  Replicas: 3-20 │   │  Replicas: 2-10 │
+│  HPA: CPU 70%   │   │  HPA: CPU 70%   │   │  HPA: CPU 70%   │
+└────────┬────────┘   └────────┬────────┘   └────────┬────────┘
+         │                     │                     │
+         ▼                     ▼                     ▼
+┌──────────────────────────────────────────────────────────┐
+│                    Kafka Cluster                          │
+│              (3 brokers, 6 partitions)                    │
+└──────────────────────────────────────────────────────────┘
+         │                     │                     │
+         ▼                     ▼                     ▼
+┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+│   Redis Sentinel │   │  PostgreSQL      │   │   S3 / GCS       │
+│   (HA mode)      │   │  Primary + Read  │   │   (Future)       │
+│                  │   │  Replica         │   │                  │
+└──────────────────┘   └──────────────────┘   └──────────────────┘
+```
+
+### Local Development
+
+```bash
+docker-compose up -d postgres redis kafka   # Start dependencies
+make run-api                                 # http://localhost:5000 (insights)
+make run-collector                           # http://localhost:5001 (ingestion)
+make run-processor                           # Background worker (no port)
+# OR
+make dev                                     # All at once
+```
+
+### Docker Compose
+
+```bash
+docker-compose up --build -d    # Start everything
+docker-compose down             # Stop
+```
+
+### Testing
+
+```bash
+dotnet test
+```
+
+---
+
+## Monitoring & Observability
+
+| Aspect | Implementation |
+|--------|---------------|
+| **Health Checks** | `/healthz` endpoint on all services (liveness + readiness) |
+| **Logging** | Structured JSON logging via `ILogger<T>` with event IDs |
+| **Metrics** | Prometheus-compatible via OpenTelemetry (configurable) |
+| **Tracing** | OpenTelemetry support for distributed tracing across services |
+| **K8s Probes** | Liveness + readiness configured in deployment manifests |
+
+### Key Metrics to Monitor
+
+| Metric | Where | Target |
+|--------|-------|--------|
+| API P95 latency | RetailMedia.Api | < 200ms |
+| Event ingestion rate | EventCollector | Track baseline; alert on drop >20% |
+| Kafka consumer lag | StreamProcessor | < 10,000 messages |
+| Redis memory usage | Redis | < 80% of maxmemory |
+| PostgreSQL connections | PostgreSQL | < 80% of max |
+| Error rate (5xx) | All services | < 1% |
+
+---
+
+## Challenges & Trade-offs
+
+| Trade-off | Choice | Rationale |
+|-----------|--------|-----------|
+| **Real-time vs Accuracy** | Redis counters for speed; nightly reconciliation for precision | Users see near-real-time counts; batch jobs correct drift |
+| **PostgreSQL vs Cassandra** | PostgreSQL now; Cassandra if >100K writes/sec | Consistency + migrations now; scale via read replicas |
+| **Redis as counter** | Fast INCR/GET; 8-byte loss on crash; flushed periodically | Cache-aside pattern covers reads; flush needs implementation |
+| **Shared vs per-tenant DB** | Shared with tenantId column; dedicated if enterprise | Cost efficiency; migration path to dedicated if needed |
+| **Kafka partition skew** | Partition by tenantId:campaignId; sub-partitions for large campaigns | Ordering per campaign; skew mitigated by campaign diversity |
+| **Stream processing engine** | .NET BackgroundService vs Apache Flink | Same conceptual model; Flink warranted at 500M+ events/day |
+
+### Common Interview Questions
+
+**Why not Apache Flink?**
+For this scope (50M events/day, simple stateful operations), a BackgroundService with manual Kafka commits achieves the same result without Flink cluster overhead. The migration path is clean — handlers are already isolated classes. Flink becomes necessary for exactly-once guarantees, event-time processing with watermarks, and backpressure management at higher throughput.
+
+**How do you handle 10x Black Friday traffic?**
+1. Kafka absorbs the spike — producers publish at full rate, consumers catch up when traffic subsides
+2. K8s HPA auto-scales stateless services (API, Collector)
+3. StreamProcessor scales with Kafka partitions
+4. Degraded mode: Redis-only counters if PostgreSQL is saturated; DB catches up after spike
+
+---
+
+## Cost Optimization
+
+| Layer | Cost Driver | Optimization |
+|-------|-------------|-------------|
+| **Kafka** | Storage (retention) | 7-day retention; move older events to S3 |
+| **Redis** | Memory | Session TTL (auto-expiry); eviction: allkeys-lru |
+| **PostgreSQL** | Storage + connections | Read replicas; PgBouncer for connection pooling |
+| **K8s** | Compute | HPA scales down at low traffic; spot VMs for processor |
+| **Storage** | Archival | Lifecycle: Standard → Infrequent Access → Glacier |
+
+---
 
 ## Running Locally
 
@@ -146,65 +585,54 @@ All insight endpoints require `X-Tenant-Id` header or JWT `tenantId` claim.
 ### Quick Start
 
 ```bash
-# Start dependencies
+# Start infrastructure
 docker-compose up -d postgres redis kafka
 
-# Run services (in separate terminals)
+# Run each service in separate terminals
 make run-api        # http://localhost:5000
 make run-collector  # http://localhost:5001
 make run-processor
 
-# Or all at once
+# Or everything with one command
 make dev
 ```
 
-### Docker Compose
+### Full Docker
 
 ```bash
-# Start everything
-docker-compose up --build -d
-
-# Stop
-docker-compose down
+docker-compose up --build -d    # All services + infra in containers
+docker-compose down             # Stop everything
 ```
 
-### Test
+### Verify
 
 ```bash
-dotnet test
+curl http://localhost:5000/healthz                    # API health
+curl http://localhost:5001/healthz                    # Collector health
+curl -X POST http://localhost:5001/events \           # Send events
+  -H 'Content-Type: application/json' \
+  -d '{"eventId":"test_1","tenantId":"tesco","userId":"u1","campaignId":"cmp1","eventType":"AdImpression","timestamp":"2026-06-16T12:00:00Z"}'
+curl -H 'X-Tenant-Id: tesco' http://localhost:5000/ad/cmp1/impressions   # Query
 ```
 
-## Design Decisions
-
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| API pattern | Minimal API | Less ceremony, same DI + testability |
-| Persistence | EF Core + Dapper | EF for writes/migrations, Dapper for reads |
-| Caching | Cache-aside with Redis TTL | Stale-tolerant, 30-60s TTL |
-| Partitioning | tenantId + campaignId | Ordering guarantee per campaign |
-| Attribution | Redis session hash + TTL | In-memory speed, auto-expiry |
-| Multi-tenancy | Shared DB, tenantId column | Lower cost, logical isolation |
-
-## Trade-offs
-
-- **Real-time vs Accuracy**: Redis counters for low-latency reads; nightly reconciliation for precision
-- **PostgreSQL vs Cassandra**: PostgreSQL now (consistency, familiar); Cassandra if >100K writes/sec
-- **Redis as counter**: Fast, but potential 8-byte loss on crash; flushed to PostgreSQL periodically
-- **Single DB vs dedicated per tenant**: Shared for cost efficiency; dedicated clusters for enterprise retailers
-- **Partition skew**: Large campaigns may hotspot; mitigated by sub-partitions if needed
-
-## Monitoring & Observability
-
-- Health checks: `/healthz` (liveness + readiness)
-- Logging: Structured JSON logging via `ILogger<T>`
-- Metrics: Prometheus-compatible via OpenTelemetry (configurable)
-- Tracing: OpenTelemetry support for distributed tracing
+---
 
 ## Future Enhancements
 
-- Real-time dashboards (WebSocket + Server-Sent Events)
-- ML-based attribution models
-- Budget pacing and campaign budget management
-- Fraud detection pipeline
-- BigQuery integration for historical analytics
-- Prometheus + Grafana dashboards
+- **Real-time dashboards** — WebSocket / SSE push to marketer dashboards
+- **ML-based attribution** — Multi-touch models (linear, time-decay, algorithmic)
+- **Budget pacing** — Real-time budget checks; stop serving when budget exhausted
+- **Fraud detection** — Anomaly detection on click patterns (bot detection)
+- **BigQuery integration** — Historical analytics and BI reporting
+- **Prometheus + Grafana** — Production-grade monitoring dashboards
+
+---
+
+## Further Reading
+
+| Document | Description |
+|----------|-------------|
+| [`docs/Architecture_Diagrams.md`](docs/Architecture_Diagrams.md) | HLD, LLD, class diagrams, sequence diagrams |
+| [`docs/Use_Case_Walkthroughs.md`](docs/Use_Case_Walkthroughs.md) | End-to-end walkthroughs with dummy data for all event types |
+| [`docs/System_Understanding.md`](docs/System_Understanding.md) | How implementation maps to interview requirements, design decisions, limitations |
+| [`docs/Scope_For_Extension.md`](docs/Scope_For_Extension.md) | Production extensions: fan-in/fan-out, Flink, data lake, cost optimization, interview talking points |
