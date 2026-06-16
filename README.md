@@ -13,10 +13,10 @@ graph TD
     D --> G[(PostgreSQL<br/>Campaign Metrics)]
     F --> H[Insights API]
     G --> H
-    H -->|GET /ad/{id}/clicks| I[Marketers / Retailers]
-    H -->|GET /ad/{id}/impressions| I
-    H -->|GET /ad/{id}/clickToBasket| I
-    H -->|GET /ad/{id}/metrics| I
+    H -->|GET /ad/:id/clicks| I[Marketers / Retailers]
+    H -->|GET /ad/:id/impressions| I
+    H -->|GET /ad/:id/clickToBasket| I
+    H -->|GET /ad/:id/metrics| I
 ```
 
 ## Architecture
