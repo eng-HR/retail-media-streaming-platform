@@ -7,12 +7,14 @@ namespace RetailMedia.StreamProcessor.Handlers;
 public class AttributionHandler
 {
     private readonly IRedisCache _cache;
+    private readonly IMetricsRepository _metricsRepo;
     private readonly ILogger<AttributionHandler> _logger;
     private static readonly TimeSpan AttributionWindow = TimeSpan.FromMinutes(30);
 
-    public AttributionHandler(IRedisCache cache, ILogger<AttributionHandler> logger)
+    public AttributionHandler(IRedisCache cache, IMetricsRepository metricsRepo, ILogger<AttributionHandler> logger)
     {
         _cache = cache;
+        _metricsRepo = metricsRepo;
         _logger = logger;
     }
 
@@ -45,6 +47,10 @@ public class AttributionHandler
 
         var redisKey = $"campaign:{@event.CampaignId}:clickToBasket";
         await _cache.IncrementCounterAsync(redisKey);
+
+        var metric = new CampaignMetric(@event.TenantId, @event.CampaignId, MetricType.ClickToBasket, 1, @event.Timestamp.Date);
+        await _metricsRepo.UpsertMetricAsync(metric);
+
         _logger.LogInformation("Attributed add-to-cart for user {UserId} campaign {CampaignId}",
             @event.UserId, @event.CampaignId);
     }

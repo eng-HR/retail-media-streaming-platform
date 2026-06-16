@@ -10,6 +10,7 @@ namespace RetailMedia.StreamProcessor.Tests;
 public class ClickHandlerTests
 {
     private readonly Mock<IRedisCache> _cacheMock;
+    private readonly Mock<IMetricsRepository> _metricsRepoMock;
     private readonly ClickHandler _handler;
     private static readonly TenantId TenantId = TenantId.From("tesco");
     private static readonly CampaignId CampaignId = CampaignId.From("cmp_789");
@@ -17,8 +18,9 @@ public class ClickHandlerTests
     public ClickHandlerTests()
     {
         _cacheMock = new Mock<IRedisCache>();
+        _metricsRepoMock = new Mock<IMetricsRepository>();
         var loggerMock = new Mock<ILogger<ClickHandler>>();
-        _handler = new ClickHandler(_cacheMock.Object, loggerMock.Object);
+        _handler = new ClickHandler(_cacheMock.Object, _metricsRepoMock.Object, loggerMock.Object);
     }
 
     [Fact]

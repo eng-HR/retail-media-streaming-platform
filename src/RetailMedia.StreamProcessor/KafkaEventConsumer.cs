@@ -87,6 +87,8 @@ public class KafkaEventConsumer : BackgroundService
     {
         using var scope = _services.CreateScope();
         var cache = scope.ServiceProvider.GetRequiredService<IRedisCache>();
+        var metricsRepo = scope.ServiceProvider.GetRequiredService<IMetricsRepository>();
+        var eventRepo = scope.ServiceProvider.GetRequiredService<IEventRepository>();
         var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
 
         try
@@ -107,22 +109,24 @@ public class KafkaEventConsumer : BackgroundService
             switch (@event.Type)
             {
                 case EventType.AdClick:
-                    await new ClickHandler(cache, loggerFactory.CreateLogger<ClickHandler>()).HandleAsync(@event);
-                    await new AttributionHandler(cache, loggerFactory.CreateLogger<AttributionHandler>()).HandleClickAsync(@event);
+                    await new ClickHandler(cache, metricsRepo, loggerFactory.CreateLogger<ClickHandler>()).HandleAsync(@event);
+                    await new AttributionHandler(cache, metricsRepo, loggerFactory.CreateLogger<AttributionHandler>()).HandleClickAsync(@event);
                     break;
 
                 case EventType.AdImpression:
-                    await new ImpressionHandler(cache, loggerFactory.CreateLogger<ImpressionHandler>()).HandleAsync(@event);
+                    await new ImpressionHandler(cache, metricsRepo, loggerFactory.CreateLogger<ImpressionHandler>()).HandleAsync(@event);
                     break;
 
                 case EventType.AddToCart:
-                    await new AttributionHandler(cache, loggerFactory.CreateLogger<AttributionHandler>()).HandleAddToCartAsync(@event);
+                    await new AttributionHandler(cache, metricsRepo, loggerFactory.CreateLogger<AttributionHandler>()).HandleAddToCartAsync(@event);
                     break;
 
                 default:
                     _logger.LogDebug("Unhandled event type: {Type}", @event.Type);
                     break;
             }
+
+            await eventRepo.AddAsync(@event, ct);
         }
         catch (Exception ex)
         {

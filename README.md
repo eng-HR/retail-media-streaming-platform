@@ -140,8 +140,7 @@ src/
 │
 └── RetailMedia.StreamProcessor/      # Layer 3c: Background Worker
     ├── Handlers/                     # ClickHandler, ImpressionHandler, AttributionHandler
-    ├── KafkaEventConsumer.cs
-    └── RedisFlushService.cs
+    └── KafkaEventConsumer.cs
 
 tests/
 ├── RetailMedia.Api.Tests/
@@ -216,13 +215,16 @@ sequenceDiagram
     K->>KC: Consume message
     KC->>KC: Deserialize JSON → Domain Event
     KC->>KC: Route by EventType
+    KC->>P: INSERT INTO Events (write-along)
 
     alt AdImpression
         KC->>H: ImpressionHandler
         H->>R: INCR campaign:{id}:impressions
+        H->>P: UPSERT CampaignMetrics (Impressions)
     else AdClick
         KC->>H: ClickHandler
         H->>R: INCR campaign:{id}:clicks
+        H->>P: UPSERT CampaignMetrics (Clicks)
         KC->>H: AttributionHandler.HandleClick
         H->>R: SETEX session:{tenant}:{user} (30 min TTL)
     else AddToCart
@@ -230,18 +232,19 @@ sequenceDiagram
         H->>R: GET session:{tenant}:{user}
         alt Session exists & within 30 min
             H->>R: INCR campaign:{id}:clickToBasket
+            H->>P: UPSERT CampaignMetrics (ClickToBasket)
         end
     end
 ```
 
 ### Attribution Model
 
-**Last-click attribution** with a 30-minute session window:
+**Last-click attribution** with a 30-minute session window and write-along persistence:
 
-1. User clicks ad → Redis stores `session:{tenant}:{user}` with campaign ID + timestamp (TTL = 30 min)
+1. User clicks ad → Redis stores `session:{tenant}:{user}` with campaign ID + timestamp (TTL = 30 min); PostgreSQL upserts Clicks metric
 2. User adds item to cart → Redis checks for existing session
-3. If session exists and is within 30 min → increment `clickToBasket` counter
-4. If no session or window expired → no attribution (silent no-op)
+3. If session exists and is within 30 min → increment `clickToBasket` counter in Redis **and** UPSERT ClickToBasket metric in PostgreSQL
+4. If no session or window expired → no attribution (silent no-op); raw event still persisted to PostgreSQL Events table
 
 ### Consumer Configuration
 
@@ -301,6 +304,22 @@ CampaignMetrics
 └── Index: (TenantId, CampaignId, Metric, Date)
 ```
 
+### Write Strategy (Write-Along)
+
+Every processed event writes to both Redis and PostgreSQL at the same time:
+
+```
+Kafka message → StreamProcessor
+    │
+    ├── Redis: INCR campaign:{id}:{metric}    ← real-time counter
+    ├── Redis: SETEX session:{tenant}:{user}  ← attribution tracking
+    │
+    └── PostgreSQL: INSERT INTO Events               ← raw event persistence
+    └── PostgreSQL: UPSERT CampaignMetrics (Count+1) ← aggregated metrics
+```
+
+Redis provides sub-millisecond reads for real-time counters. PostgreSQL provides durable storage with historical data and queryable metrics.
+
 ### Read Strategy (Cache-Aside)
 
 ```
@@ -315,7 +334,7 @@ API Request
          Response: { data: { clicks: combined }, meta }
 ```
 
-Redis gives sub-millisecond reads for real-time counters. PostgreSQL provides durable storage with historical data. The `/metrics` endpoint additionally supports date-range filtering via EF Core.
+No periodic flush is needed — write-along keeps PostgreSQL consistent at event time. The `/metrics` endpoint additionally supports date-range filtering via EF Core on the persisted `CampaignMetrics` table.
 
 ---
 
@@ -545,7 +564,7 @@ dotnet test
 |-----------|--------|-----------|
 | **Real-time vs Accuracy** | Redis counters for speed; nightly reconciliation for precision | Users see near-real-time counts; batch jobs correct drift |
 | **PostgreSQL vs Cassandra** | PostgreSQL now; Cassandra if >100K writes/sec | Consistency + migrations now; scale via read replicas |
-| **Redis as counter** | Fast INCR/GET; 8-byte loss on crash; flushed periodically | Cache-aside pattern covers reads; flush needs implementation |
+| **Redis as counter** | Fast INCR/GET; 8-byte loss on crash; write-along to PG | Write-along persists every event to PostgreSQL; Redis can be rebuilt from PG on restart |
 | **Shared vs per-tenant DB** | Shared with tenantId column; dedicated if enterprise | Cost efficiency; migration path to dedicated if needed |
 | **Kafka partition skew** | Partition by tenantId:campaignId; sub-partitions for large campaigns | Ordering per campaign; skew mitigated by campaign diversity |
 | **Stream processing engine** | .NET BackgroundService vs Apache Flink | Same conceptual model; Flink warranted at 500M+ events/day |
@@ -691,6 +710,16 @@ docker exec retail-postgres psql -U retail -d retail_media -c \
 #  e2e_003  | AddToCart  | tesco    | cmp_summer   | alice  | 2026-06-16 10:15:00
 #  e2e_004  | ProductView| tesco    | cmp_summer   | alice  | 2026-06-16 10:20:00
 
+# ── PostgreSQL: check aggregated metrics ──
+docker exec retail-postgres psql -U retail -d retail_media -c \
+  "SELECT * FROM \"CampaignMetrics\";"
+# Sample output:
+#  Id | TenantId | CampaignId   | Metric      | Count |       Date
+# ----+----------+--------------+-------------+-------+---------------------
+#   1 | tesco    | cmp_summer   | Clicks      |     1 | 2026-06-16 00:00:00
+#   2 | tesco    | cmp_summer   | Impressions |     1 | 2026-06-16 00:00:00
+#   3 | tesco    | cmp_summer   | ClickToBasket|    1 | 2026-06-16 00:00:00
+
 # ── Consumer group status ──
 docker exec retail-kafka kafka-consumer-groups \
   --bootstrap-server localhost:9092 \
@@ -783,6 +812,30 @@ docker exec retail-kafka kafka-console-consumer \
 docker exec retail-kafka kafka-consumer-groups \
   --bootstrap-server localhost:9092 \
   --describe --group retail-media-processor
+```
+
+### Resetting data for a clean test
+
+```bash
+# 1. Delete Kafka topic (auto-recreates on next produce)
+docker exec retail-kafka kafka-topics --bootstrap-server localhost:9092 \
+  --delete --topic raw-events
+
+# 2. Reset consumer group offsets (skip any residual messages)
+docker exec retail-kafka kafka-consumer-groups --bootstrap-server localhost:9092 \
+  --group retail-media-processor --reset-offsets --to-latest --execute --all-topics
+
+# 3. Flush Redis counters and sessions
+docker exec retail-redis redis-cli FLUSHDB
+
+# 4. Clear PostgreSQL tables
+docker exec retail-postgres psql -U retail -d retail_media -c \
+  "DELETE FROM \"CampaignMetrics\"; DELETE FROM \"Events\";"
+
+# Verify everything is clean:
+docker exec retail-redis redis-cli DBSIZE          # → (integer) 0
+docker exec retail-postgres psql -U retail -d retail_media -c \
+  "SELECT count(*) FROM \"Events\";"               # → 0
 ```
 
 ### Database & Cache

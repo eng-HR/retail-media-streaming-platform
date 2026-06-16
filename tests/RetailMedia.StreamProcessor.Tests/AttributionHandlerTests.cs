@@ -10,6 +10,7 @@ namespace RetailMedia.StreamProcessor.Tests;
 public class AttributionHandlerTests
 {
     private readonly Mock<IRedisCache> _cacheMock;
+    private readonly Mock<IMetricsRepository> _metricsRepoMock;
     private readonly AttributionHandler _handler;
     private static readonly TenantId TenantId = TenantId.From("tesco");
     private static readonly CampaignId CampaignId = CampaignId.From("cmp_789");
@@ -17,8 +18,9 @@ public class AttributionHandlerTests
     public AttributionHandlerTests()
     {
         _cacheMock = new Mock<IRedisCache>();
+        _metricsRepoMock = new Mock<IMetricsRepository>();
         var loggerMock = new Mock<ILogger<AttributionHandler>>();
-        _handler = new AttributionHandler(_cacheMock.Object, loggerMock.Object);
+        _handler = new AttributionHandler(_cacheMock.Object, _metricsRepoMock.Object, loggerMock.Object);
     }
 
     [Fact]

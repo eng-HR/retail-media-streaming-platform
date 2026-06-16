@@ -15,7 +15,6 @@ builder.Services.AddSingleton(sp =>
 });
 
 builder.Services.AddHostedService(sp => sp.GetRequiredService<KafkaEventConsumer>());
-builder.Services.AddHostedService<RedisFlushService>();
 
 var host = builder.Build();
 host.Run();
