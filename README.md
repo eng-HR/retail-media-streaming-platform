@@ -54,7 +54,7 @@ graph TD
                      ┌──────────────┐     ┌──────────────┐
                      │  Insights API│     │StreamProcessor│
                      │  Port 5000   │     │  Background   │
-                     │  .NET 8      │     │  Worker .NET  │
+                      │  .NET 10     │     │  Worker .NET  │
                      └──────┬───────┘     └──────┬───────┘
                             │                    │
                      ┌──────┴──────┐      ┌──────┴──────┐
@@ -100,8 +100,8 @@ The codebase follows **Clean Architecture** (Ports & Adapters) with 4 layers:
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| **API Framework** | .NET 8 Minimal API | Less ceremony than MVC, full DI + middleware support |
-| **Stream Processing** | .NET 8 Background Service | Same conceptual model as Flink (consume → process → state → sink), no cluster overhead |
+| **API Framework** | .NET 10 Minimal API | Less ceremony than MVC, full DI + middleware support |
+| **Stream Processing** | .NET 10 Background Service | Same conceptual model as Flink (consume → process → state → sink), no cluster overhead |
 | **Event Bus** | Apache Kafka (Confluent.Kafka) | Durable, replayable, partitioned — industry standard |
 | **Cache** | Redis (StackExchange.Redis) | Atomic INCR, TTL-based sessions, sub-millisecond reads |
 | **Database** | PostgreSQL (EF Core + Dapper) | Strong consistency, relational model, migrations built-in |
@@ -797,6 +797,7 @@ docker exec -it retail-postgres psql -U retail -d retail_media
 docker exec -it retail-redis redis-cli
 # Then: keys * — list all keys
 #       GET "campaign:cmp_summer:clicks" — get click count
+```
 
 ---
 
