@@ -579,41 +579,224 @@ For this scope (50M events/day, simple stateful operations), a BackgroundService
 
 ### Prerequisites
 
-- .NET 8 SDK
+- .NET 10 SDK
 - Docker Desktop
+- `make` (built-in on macOS, `choco install make` on Windows)
 
 ### Quick Start
 
 ```bash
-# Start infrastructure
-docker-compose up -d postgres redis kafka
+# 1. Start infrastructure (PostgreSQL, Redis, Kafka)
+docker-compose up -d postgres redis zookeeper kafka
 
-# Run each service in separate terminals
-make run-api        # http://localhost:5000
-make run-collector  # http://localhost:5001
-make run-processor
+# 2. Start services (3 separate terminals)
+make run-api          # http://localhost:5000 — query API
+make run-collector    # http://localhost:5229 — event ingestion
+make run-processor    # Kafka consumer — processes events
 
-# Or everything with one command
-make dev
+# Or everything in Docker containers:
+make docker-up
 ```
 
-### Full Docker
+## End-to-End Test Walkthrough
+
+### 1. Verify all services are healthy
 
 ```bash
-docker-compose up --build -d    # All services + infra in containers
-docker-compose down             # Stop everything
+curl http://localhost:5000/healthz       # → Healthy
+curl http://localhost:5229/healthz       # → Healthy
 ```
 
-### Verify
+### 2. Ingest events (the full funnel)
+
+Open a terminal and send these events in order:
 
 ```bash
-curl http://localhost:5000/healthz                    # API health
-curl http://localhost:5001/healthz                    # Collector health
-curl -X POST http://localhost:5001/events \           # Send events
-  -H 'Content-Type: application/json' \
-  -d '{"eventId":"test_1","tenantId":"tesco","userId":"u1","campaignId":"cmp1","eventType":"AdImpression","timestamp":"2026-06-16T12:00:00Z"}'
-curl -H 'X-Tenant-Id: tesco' http://localhost:5000/ad/cmp1/impressions   # Query
+# AdClick — starts a 30-min attribution session
+curl -X POST http://localhost:5229/events \
+  -H "Content-Type: application/json" \
+  -d '{"eventId":"e2e_001","tenantId":"tesco","userId":"alice","campaignId":"cmp_summer","eventType":"AdClick","timestamp":"2026-06-16T10:00:00Z"}'
+
+# AdImpression — counts an impression
+curl -X POST http://localhost:5229/events \
+  -H "Content-Type: application/json" \
+  -d '{"eventId":"e2e_002","tenantId":"tesco","userId":"alice","campaignId":"cmp_summer","eventType":"AdImpression","timestamp":"2026-06-16T10:01:00Z"}'
+
+# AddToCart — within 30 min → attributed to the click
+curl -X POST http://localhost:5229/events \
+  -H "Content-Type: application/json" \
+  -d '{"eventId":"e2e_003","tenantId":"tesco","userId":"alice","campaignId":"cmp_summer","eventType":"AddToCart","timestamp":"2026-06-16T10:15:00Z"}'
+
+# ProductView — recorded but no special processing
+curl -X POST http://localhost:5229/events \
+  -H "Content-Type: application/json" \
+  -d '{"eventId":"e2e_004","tenantId":"tesco","userId":"alice","campaignId":"cmp_summer","eventType":"ProductView","timestamp":"2026-06-16T10:20:00Z"}'
 ```
+
+Each returns `202 Accepted` with the event ID.
+
+### 3. Query campaign insights
+
+```bash
+# Campaign metrics (with tenant header)
+curl -H "X-Tenant-Id: tesco" http://localhost:5000/ad/cmp_summer/clicks
+curl -H "X-Tenant-Id: tesco" http://localhost:5000/ad/cmp_summer/impressions
+curl -H "X-Tenant-Id: tesco" http://localhost:5000/ad/cmp_summer/clickToBasket
+curl -H "X-Tenant-Id: tesco" "http://localhost:5000/ad/cmp_summer/metrics"
+
+# Expected output:
+# clicks        → {"clicks": 1}
+# impressions   → {"impressions": 1}
+# clickToBasket → {"clickToBasket": 1}   (attributed within 30-min window)
+# metrics       → {"clicks": 1, "impressions": 1, "clickToBasket": 1}
+```
+
+### 4. Verify data at each layer
+
+After ingesting events, confirm the data flows through every service:
+
+```bash
+# ── Kafka: check raw events in the topic ──
+docker exec retail-kafka kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic raw-events \
+  --from-beginning \
+  --max-messages 3
+
+# ── Redis: check counters and click sessions ──
+docker exec retail-redis redis-cli keys '*'
+# Sample output:
+#   campaign:cmp_summer:clicks
+#   campaign:cmp_summer:impressions
+#   campaign:cmp_summer:clickToBasket
+#   session:tesco:alice
+
+docker exec retail-redis redis-cli GET "campaign:cmp_summer:clicks"
+# → "1"
+
+docker exec retail-redis redis-cli GET "campaign:cmp_summer:clickToBasket"
+# → "1"
+
+docker exec retail-redis redis-cli GET "session:tesco:alice"
+# → {"campaignId":"cmp_summer","timestamp":"2026-06-16T10:00:00Z"}
+
+# ── PostgreSQL: check persisted events ──
+docker exec retail-postgres psql -U retail -d retail_media -c \
+  "SELECT \"EventId\", \"Type\", \"TenantId\", \"CampaignId\", \"UserId\", \"Timestamp\" FROM \"Events\";"
+# Sample output:
+#  EventId  |    Type    | TenantId | CampaignId   | UserId |      Timestamp
+# ----------+------------+----------+--------------+--------+---------------------
+#  e2e_001  | AdClick    | tesco    | cmp_summer   | alice  | 2026-06-16 10:00:00
+#  e2e_002  | AdImpression| tesco   | cmp_summer   | alice  | 2026-06-16 10:01:00
+#  e2e_003  | AddToCart  | tesco    | cmp_summer   | alice  | 2026-06-16 10:15:00
+#  e2e_004  | ProductView| tesco    | cmp_summer   | alice  | 2026-06-16 10:20:00
+
+# ── Consumer group status ──
+docker exec retail-kafka kafka-consumer-groups \
+  --bootstrap-server localhost:9092 \
+  --describe --group retail-media-processor
+# Shows: CURRENT-OFFSET, LOG-END-OFFSET, LAG (should be 0 if all consumed)
+```
+
+### 5. Expired attribution (over 30 min)
+
+```bash
+# Click at 09:00
+curl -X POST http://localhost:5229/events \
+  -H "Content-Type: application/json" \
+  -d '{"eventId":"e2e_exp_01","tenantId":"tesco","userId":"bob","campaignId":"cmp_autumn","eventType":"AdClick","timestamp":"2026-06-16T09:00:00Z"}'
+
+# AddToCart at 10:00 (60 min later — session expired)
+curl -X POST http://localhost:5229/events \
+  -H "Content-Type: application/json" \
+  -d '{"eventId":"e2e_exp_02","tenantId":"tesco","userId":"bob","campaignId":"cmp_autumn","eventType":"AddToCart","timestamp":"2026-06-16T10:00:00Z"}'
+
+# Verify: clickToBasket stays 0
+curl -H "X-Tenant-Id: tesco" http://localhost:5000/ad/cmp_autumn/clickToBasket
+# → {"clickToBasket": 0}
+```
+
+## Docker Commands
+
+### Managing services
+
+```bash
+# Start all services (in containers, not local dotnet)
+docker-compose up --build -d
+
+# Start individual services
+docker-compose up -d postgres redis zookeeper kafka
+docker-compose up -d api processor collector
+
+# Stop everything
+docker-compose down
+
+# Stop individual services
+docker-compose stop postgres
+
+# Rebuild and restart a single service
+docker-compose up -d --build api
+
+# View resource usage
+docker stats
+```
+
+### Viewing logs
+
+```bash
+# Follow all service logs
+docker-compose logs -f
+
+# Follow a specific service
+docker-compose logs -f api
+docker-compose logs -f processor
+docker-compose logs -f collector
+docker-compose logs -f kafka
+
+# Last 100 lines with timestamps
+docker-compose logs --tail=100 -t processor
+
+# Search logs for errors
+docker-compose logs processor | grep -i error
+
+# Local dotnet process logs (when running via make)
+# Logs go to stdout; use terminal multiplexer (tmux, iTerm panes)
+```
+
+### Kafka troubleshooting
+
+```bash
+# List topics
+docker exec retail-kafka kafka-topics --list --bootstrap-server localhost:9092
+
+# Describe a topic
+docker exec retail-kafka kafka-topics --describe --topic raw-events --bootstrap-server localhost:9092
+
+# Consume messages (view raw events)
+docker exec retail-kafka kafka-console-consumer \
+  --bootstrap-server localhost:9092 \
+  --topic raw-events \
+  --from-beginning \
+  --max-messages 5
+
+# Get consumer group status
+docker exec retail-kafka kafka-consumer-groups \
+  --bootstrap-server localhost:9092 \
+  --describe --group retail-media-processor
+```
+
+### Database & Cache
+
+```bash
+# Connect to PostgreSQL
+docker exec -it retail-postgres psql -U retail -d retail_media
+# Then: \dt — list tables
+#       SELECT * FROM "Events"; — view events
+
+# Connect to Redis
+docker exec -it retail-redis redis-cli
+# Then: keys * — list all keys
+#       GET "campaign:cmp_summer:clicks" — get click count
 
 ---
 

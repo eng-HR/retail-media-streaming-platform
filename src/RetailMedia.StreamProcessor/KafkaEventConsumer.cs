@@ -9,45 +9,76 @@ namespace RetailMedia.StreamProcessor;
 
 public class KafkaEventConsumer : BackgroundService
 {
-    private readonly IConsumer<string, string> _consumer;
+    private readonly string _bootstrapServers;
     private readonly IServiceProvider _services;
     private readonly ILogger<KafkaEventConsumer> _logger;
+    private IConsumer<string, string> _consumer;
     private const string Topic = "raw-events";
 
     public KafkaEventConsumer(string bootstrapServers, IServiceProvider services, ILogger<KafkaEventConsumer> logger)
     {
+        _bootstrapServers = bootstrapServers;
         _services = services;
         _logger = logger;
-        var config = new ConsumerConfig
+        _consumer = CreateConsumer();
+    }
+
+    private IConsumer<string, string> CreateConsumer()
+    {
+        var old = _consumer;
+        if (old != null)
         {
-            BootstrapServers = bootstrapServers,
+            try { old.Close(); } catch { }
+            try { old.Dispose(); } catch { }
+        }
+
+        return new ConsumerBuilder<string, string>(new ConsumerConfig
+        {
+            BootstrapServers = _bootstrapServers,
             GroupId = "retail-media-processor",
             AutoOffsetReset = AutoOffsetReset.Earliest,
-            EnableAutoCommit = false
-        };
-        _consumer = new ConsumerBuilder<string, string>(config).Build();
+            EnableAutoCommit = false,
+            AllowAutoCreateTopics = true
+        }).Build();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _consumer.Subscribe(Topic);
-        _logger.LogInformation("Started consuming topic {Topic}", Topic);
-
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                var result = _consumer.Consume(stoppingToken);
-                await ProcessMessageAsync(result.Message, stoppingToken);
-                _consumer.Commit(result);
-            }
-            catch (ConsumeException ex)
-            {
-                _logger.LogError(ex, "Kafka consume error");
+                _consumer.Subscribe(Topic);
+                _logger.LogInformation("Started consuming topic {Topic}", Topic);
+
+                while (!stoppingToken.IsCancellationRequested)
+                {
+                    try
+                    {
+                        var result = _consumer.Consume(stoppingToken);
+                        await ProcessMessageAsync(result.Message, stoppingToken);
+                        _consumer.Commit(result);
+                    }
+                    catch (ConsumeException ex)
+                    {
+                        _logger.LogError(ex, "Kafka consume error");
+                        break;
+                    }
+                }
             }
             catch (OperationCanceledException)
             {
                 break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Consumer faulted, recreating...");
+            }
+
+            if (!stoppingToken.IsCancellationRequested)
+            {
+                _consumer = CreateConsumer();
+                await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
             }
         }
     }
@@ -56,7 +87,6 @@ public class KafkaEventConsumer : BackgroundService
     {
         using var scope = _services.CreateScope();
         var cache = scope.ServiceProvider.GetRequiredService<IRedisCache>();
-        var metricsRepo = scope.ServiceProvider.GetRequiredService<IMetricsRepository>();
         var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
 
         try
@@ -102,8 +132,8 @@ public class KafkaEventConsumer : BackgroundService
 
     public override void Dispose()
     {
-        _consumer?.Close();
-        _consumer?.Dispose();
+        try { _consumer?.Close(); } catch { }
+        try { _consumer?.Dispose(); } catch { }
         base.Dispose();
     }
 }

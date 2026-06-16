@@ -24,13 +24,13 @@ public class KafkaProducer : IKafkaProducer, IDisposable
         var key = $"{@event.TenantId}:{@event.CampaignId}";
         var value = JsonSerializer.Serialize(new
         {
-            @event.EventId,
+            eventId = @event.EventId,
             tenantId = @event.TenantId.ToString(),
-            @event.UserId,
+            userId = @event.UserId,
             campaignId = @event.CampaignId.ToString(),
             eventType = @event.Type.ToString(),
-            @event.Timestamp,
-            @event.Metadata
+            timestamp = @event.Timestamp,
+            metadata = @event.Metadata
         });
 
         var result = await _producer.ProduceAsync(Topic, new Message<string, string>
