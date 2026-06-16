@@ -587,7 +587,7 @@ For this scope (50M events/day, simple stateful operations), a BackgroundService
 
 ```bash
 # 1. Start infrastructure (PostgreSQL, Redis, Kafka)
-docker-compose up -d postgres redis zookeeper kafka
+docker-compose up -d postgres redis kafka
 
 # 2. Start services (3 separate terminals)
 make run-api          # http://localhost:5000 — query API
@@ -725,7 +725,7 @@ curl -H "X-Tenant-Id: tesco" http://localhost:5000/ad/cmp_autumn/clickToBasket
 docker-compose up --build -d
 
 # Start individual services
-docker-compose up -d postgres redis zookeeper kafka
+docker-compose up -d postgres redis kafka
 docker-compose up -d api processor collector
 
 # Stop everything

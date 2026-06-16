@@ -18,7 +18,7 @@ run-collector:
 	$(DOTNET) run --project src/RetailMedia.EventCollector
 
 dev:
-	docker-compose up -d postgres redis kafka
+	docker-compose up -d postgres redis
 	@echo "Waiting for dependencies..."
 	@sleep 5
 	@echo "Starting services..."
