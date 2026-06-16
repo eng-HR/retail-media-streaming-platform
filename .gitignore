@@ -1,0 +1,43 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.vs/
+*.DotSettings
+*.nupkg
+*.log
+*.tmp
+*.pid
+[Ll]ogs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+[Bb]uild/
+[Dd]eploy/
+packages/
+*.nupkg
+
+# Docker
+docker-compose.override.yml
+
+# Environment
+.env
+*.env.local
+
+# Test results
+TestResults/
+coverage/
+*.trx
+*.coverage

@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retail-media-api
+  labels:
+    app: retail-media-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: retail-media-api
+  template:
+    metadata:
+      labels:
+        app: retail-media-api
+    spec:
+      containers:
+        - name: api
+          image: retail-media-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: retail-media-config
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: retail-media-api-service
+spec:
+  selector:
+    app: retail-media-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP

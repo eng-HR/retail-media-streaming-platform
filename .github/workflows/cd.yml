@@ -1,0 +1,62 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+env:
+  IMAGE_NAME: retail-media-platform
+  GKE_CLUSTER: retail-media-cluster
+  GKE_ZONE: us-central1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build and Test
+        run: |
+          dotnet restore
+          dotnet build --configuration Release
+          dotnet test --configuration Release --no-build
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+      - name: Deploy to GKE
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: retail-media-api
+          image: gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          region: ${{ env.GKE_ZONE }}

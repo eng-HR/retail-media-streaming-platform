@@ -1,0 +1,6 @@
+@RetailMedia.EventCollector_HostAddress = http://localhost:5229
+
+GET {{RetailMedia.EventCollector_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

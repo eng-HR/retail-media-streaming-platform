@@ -1,0 +1,85 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A1562C0A-3E92-4FFC-8E61-810147B42C5E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailMedia.Api", "src\RetailMedia.Api\RetailMedia.Api.csproj", "{CE52D77A-23C0-4B79-AF84-8147428C8B47}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailMedia.Domain", "src\RetailMedia.Domain\RetailMedia.Domain.csproj", "{E9C67CE7-96EB-45D9-9DFE-3B8A6848C0A4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailMedia.Application", "src\RetailMedia.Application\RetailMedia.Application.csproj", "{D02E7C4F-2B47-465C-A7BB-FA7183780816}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailMedia.Infrastructure", "src\RetailMedia.Infrastructure\RetailMedia.Infrastructure.csproj", "{DC5F86B0-CBBF-4B08-BAF2-CB15293B7E94}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailMedia.StreamProcessor", "src\RetailMedia.StreamProcessor\RetailMedia.StreamProcessor.csproj", "{2C188E73-71C6-4C5C-9920-88A0A1FB07F1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailMedia.EventCollector", "src\RetailMedia.EventCollector\RetailMedia.EventCollector.csproj", "{3E810E9D-82F0-4B42-B7F0-BDC1B56483EB}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{C0BC6188-4C5A-42AB-ADAE-181FDE330C46}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailMedia.Api.Tests", "tests\RetailMedia.Api.Tests\RetailMedia.Api.Tests.csproj", "{C28CFBBB-0AEA-40A2-BA87-9B9B8F55FC77}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailMedia.Application.Tests", "tests\RetailMedia.Application.Tests\RetailMedia.Application.Tests.csproj", "{DA83A598-08FF-4381-A13A-76A1685E7C61}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailMedia.StreamProcessor.Tests", "tests\RetailMedia.StreamProcessor.Tests\RetailMedia.StreamProcessor.Tests.csproj", "{5F24913F-30D8-4F76-867D-2A45A325A364}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CE52D77A-23C0-4B79-AF84-8147428C8B47}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CE52D77A-23C0-4B79-AF84-8147428C8B47}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CE52D77A-23C0-4B79-AF84-8147428C8B47}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CE52D77A-23C0-4B79-AF84-8147428C8B47}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E9C67CE7-96EB-45D9-9DFE-3B8A6848C0A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E9C67CE7-96EB-45D9-9DFE-3B8A6848C0A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E9C67CE7-96EB-45D9-9DFE-3B8A6848C0A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E9C67CE7-96EB-45D9-9DFE-3B8A6848C0A4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D02E7C4F-2B47-465C-A7BB-FA7183780816}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D02E7C4F-2B47-465C-A7BB-FA7183780816}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D02E7C4F-2B47-465C-A7BB-FA7183780816}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D02E7C4F-2B47-465C-A7BB-FA7183780816}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DC5F86B0-CBBF-4B08-BAF2-CB15293B7E94}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DC5F86B0-CBBF-4B08-BAF2-CB15293B7E94}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DC5F86B0-CBBF-4B08-BAF2-CB15293B7E94}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DC5F86B0-CBBF-4B08-BAF2-CB15293B7E94}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2C188E73-71C6-4C5C-9920-88A0A1FB07F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2C188E73-71C6-4C5C-9920-88A0A1FB07F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2C188E73-71C6-4C5C-9920-88A0A1FB07F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2C188E73-71C6-4C5C-9920-88A0A1FB07F1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3E810E9D-82F0-4B42-B7F0-BDC1B56483EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3E810E9D-82F0-4B42-B7F0-BDC1B56483EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3E810E9D-82F0-4B42-B7F0-BDC1B56483EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3E810E9D-82F0-4B42-B7F0-BDC1B56483EB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C28CFBBB-0AEA-40A2-BA87-9B9B8F55FC77}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C28CFBBB-0AEA-40A2-BA87-9B9B8F55FC77}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C28CFBBB-0AEA-40A2-BA87-9B9B8F55FC77}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C28CFBBB-0AEA-40A2-BA87-9B9B8F55FC77}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DA83A598-08FF-4381-A13A-76A1685E7C61}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DA83A598-08FF-4381-A13A-76A1685E7C61}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DA83A598-08FF-4381-A13A-76A1685E7C61}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DA83A598-08FF-4381-A13A-76A1685E7C61}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5F24913F-30D8-4F76-867D-2A45A325A364}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5F24913F-30D8-4F76-867D-2A45A325A364}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5F24913F-30D8-4F76-867D-2A45A325A364}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5F24913F-30D8-4F76-867D-2A45A325A364}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{CE52D77A-23C0-4B79-AF84-8147428C8B47} = {A1562C0A-3E92-4FFC-8E61-810147B42C5E}
+		{E9C67CE7-96EB-45D9-9DFE-3B8A6848C0A4} = {A1562C0A-3E92-4FFC-8E61-810147B42C5E}
+		{D02E7C4F-2B47-465C-A7BB-FA7183780816} = {A1562C0A-3E92-4FFC-8E61-810147B42C5E}
+		{DC5F86B0-CBBF-4B08-BAF2-CB15293B7E94} = {A1562C0A-3E92-4FFC-8E61-810147B42C5E}
+		{2C188E73-71C6-4C5C-9920-88A0A1FB07F1} = {A1562C0A-3E92-4FFC-8E61-810147B42C5E}
+		{3E810E9D-82F0-4B42-B7F0-BDC1B56483EB} = {A1562C0A-3E92-4FFC-8E61-810147B42C5E}
+		{C28CFBBB-0AEA-40A2-BA87-9B9B8F55FC77} = {C0BC6188-4C5A-42AB-ADAE-181FDE330C46}
+		{DA83A598-08FF-4381-A13A-76A1685E7C61} = {C0BC6188-4C5A-42AB-ADAE-181FDE330C46}
+		{5F24913F-30D8-4F76-867D-2A45A325A364} = {C0BC6188-4C5A-42AB-ADAE-181FDE330C46}
+	EndGlobalSection
+EndGlobal

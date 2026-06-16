@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retail-media-processor
+  labels:
+    app: retail-media-processor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: retail-media-processor
+  template:
+    metadata:
+      labels:
+        app: retail-media-processor
+    spec:
+      containers:
+        - name: processor
+          image: retail-media-processor:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: retail-media-config
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
