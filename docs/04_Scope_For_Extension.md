@@ -162,11 +162,10 @@ Kafka ───▶ Source ───▶ KeyBy(tenantId:campaignId)      │
 ```
 
 **Data flow:**
-1. Events land in Kafka → Redis (real-time counters)
-2. Every 30 seconds → flush Redis to PostgreSQL (counter checkpoints)
-3. Every hour → batch upsert PostgreSQL aggregates to BigQuery
-4. Raw events archived to S3 as Parquet files (partitioned by `tenant/year/month/day/hour`)
-5. After 12 months in BigQuery → move cold data to S3 Glacier
+1. Events land in Kafka → Redis (real-time counters) + PostgreSQL (write-along persistence)
+2. Every hour → batch upsert PostgreSQL aggregates to BigQuery
+3. Raw events archived to S3 as Parquet files (partitioned by `tenant/year/month/day/hour`)
+4. After 12 months in BigQuery → move cold data to S3 Glacier
 
 ### Data Lake Schema
 
@@ -205,18 +204,18 @@ s3://retail-media-data-lake/
 
 ## 4. Production-Grade Extensions
 
-### 4.1 RedisFlushService (Implement the Stub)
+### 4.1 Persistence Strategy (Write-Along → Periodic Flush)
 
-**Current:** `RedisFlushService` is a stub — it runs every 30 seconds but does nothing.
+**Current:** `RedisFlushService` removed — handlers write to both Redis and PostgreSQL at event time (write-along). Every event is instantly durable.
 
-**Production implementation:**
+**If write-along becomes a bottleneck at high throughput:**
 ```
-1. SCAN Redis for keys matching "campaign:*:{metric}" pattern
-2. For each key:
+1. Switch to periodic flush: Redis-only for counters
+2. SCAN Redis for keys matching "campaign:*:{metric}" pattern
+3. For each key:
    a. GET + GETSET(campaign:{id}:{metric}, 0) — atomic read-and-reset
-   b. Upsert Count into PostgreSQL CampaignMetrics table
-   c. Log flushed count
-3. Track flush timestamp for monitoring
+   b. Batch upsert into PostgreSQL CampaignMetrics table
+4. Track flush timestamp for monitoring
 ```
 
 **Why GETSET instead of GET+DEL:** Atomicity — no lost counts between the read and reset.
@@ -388,6 +387,6 @@ Until then, PostgreSQL with read replicas is cheaper and more maintainable."
 "Three strategies working together:
 1. **Kafka absorbs the spike** — producers publish at full speed, consumers catch up when traffic subsides. Kafka's retention (7 days) gives us a buffer.
 2. **Auto-scaling** — K8s HPA scales API and collector pods based on CPU/request count. StreamProcessor scales with Kafka partitions.
-3. **Degraded modes** — If PostgreSQL write capacity is saturated, we fall back to Redis-only mode (counters only, no DB flush). Reads still work. PostgreSQL catches up when traffic normalizes.
+3. **Degraded modes** — If PostgreSQL write capacity is saturated, we fall back to Redis-only mode (counters only, no write-along to PG). Reads still work. PostgreSQL catches up when traffic normalizes.
 
 The key insight: don't try to handle peak traffic with peak infrastructure. Use Kafka as a shock absorber and plan for eventual consistency."

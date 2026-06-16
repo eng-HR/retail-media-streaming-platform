@@ -63,7 +63,7 @@ graph TB
 | 3 | EventCollector | Kafka | Publishes validated events to `raw-events` topic |
 | 4 | Kafka | StreamProcessor | Consumes events in a background worker |
 | 5a | StreamProcessor | Redis | Increments real-time counters per campaign |
-| 5b | StreamProcessor | PostgreSQL | Upserts CampaignMetrics (periodically flushed) |
+| 5b | StreamProcessor | PostgreSQL | Upserts CampaignMetrics (write-along at event time) |
 | 6a | RetailMedia.Api | Redis | Reads real-time counter values |
 | 6b | RetailMedia.Api | PostgreSQL | Reads persisted aggregate metrics with date filters |
 
@@ -345,11 +345,6 @@ classDiagram
         -ProcessMessageAsync(Message, CancellationToken)
     }
 
-    class RedisFlushService {
-        +ExecuteAsync(CancellationToken)
-        -FlushCounters()
-    }
-
     class ClickHandler {
         +HandleAsync(Event) Task
     }
@@ -393,9 +388,6 @@ classDiagram
     ClickHandler --> IRedisCache
     ImpressionHandler --> IRedisCache
     AttributionHandler --> IRedisCache
-
-    RedisFlushService --> IRedisCache
-    RedisFlushService --> IMetricsRepository
 
     Event --> EventType
     Event --> CampaignId
@@ -466,4 +458,4 @@ sequenceDiagram
 | **Persistence** | PostgreSQL (EF Core + Dapper) | EF Core for CRUD; Dapper for raw aggregate SUM queries (performance) |
 | **Multi-tenancy** | TenantId value object + middleware | Middleware extracts tenant from JWT claim or X-Tenant-Id header; all queries scoped by tenant |
 | **Migration Strategy** | Auto-apply on startup (`db.Database.Migrate()`) | Simplifies deployment; no manual migration steps |
-| **Counter Flush** | Cache-aside (Redis + DB on read) | RedisFlushService is a placeholder; current reads combine Redis + DB at query time |
+| **Persistence Strategy** | Write-along (Redis + PostgreSQL at event time) | Every processed event writes counters to Redis and upserts aggregated metrics + raw event to PostgreSQL. No periodic flush needed. |

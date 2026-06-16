@@ -356,7 +356,7 @@ Line 33:     "SELECT COALESCE(SUM(\"Count\"), 0) FROM \"CampaignMetrics\"
 Line 34:     new { t = "tenant-retail-01", c = "camp-summer-sale-2026" });
 ```
 
-Dapper raw SQL → `SUM(Count)` across all rows. Returns `0` (no flushes yet — `RedisFlushService` is a stub).
+Dapper raw SQL → `SUM(Count)` across all rows. Returns `0` (no events processed yet for this campaign).
 
 **Back in InsightsService (line 33):**
 ```csharp
@@ -763,7 +763,7 @@ Same as ProductView — hits `default` case. No counter, no DB write.
 
 ### Precondition
 
-PostgreSQL `CampaignMetrics` table has persisted rows from a previous flush:
+PostgreSQL `CampaignMetrics` table has persisted rows from write-along persistence:
 
 | TenantId | CampaignId | Metric | Count | Date |
 |----------|-----------|--------|-------|------|
@@ -873,7 +873,7 @@ Response:
 }
 ```
 
-Note: The **`/metrics` endpoint only reads from PostgreSQL**, not Redis. It does not include real-time unflushed counters. The individual endpoints (`/clicks`, `/impressions`, `/clickToBasket`) combine Redis + DB, but `/metrics` is DB-only.
+Note: The **`/metrics` endpoint only reads from PostgreSQL**, not Redis. It does not include real-time Redis counters. The individual endpoints (`/clicks`, `/impressions`, `/clickToBasket`) combine Redis + DB, but `/metrics` is DB-only.
 
 ---
 
@@ -926,12 +926,12 @@ Status: **400 Bad Request**. No Kafka message is published. No processing occurs
 
 | # | EventType | Handler(s) | Redis Effect | DB Effect |
 |---|-----------|-----------|-------------|-----------|
-| 1 | `AdImpression` | `ImpressionHandler` | `INCR campaign:{id}:impressions` | None (until flush) |
-| 2 | `AdClick` | `ClickHandler` + `AttributionHandler.HandleClickAsync` | `INCR campaign:{id}:clicks` + `SETEX session:{t}:{u}` TTL=30min | None |
-| 3 | `AddToCart` (attributed) | `AttributionHandler.HandleAddToCartAsync` | `INCR campaign:{id}:clickToBasket` (if session found) | None |
+| 1 | `AdImpression` | `ImpressionHandler` | `INCR campaign:{id}:impressions` | `UPSERT CampaignMetrics (Impressions)` |
+| 2 | `AdClick` | `ClickHandler` + `AttributionHandler.HandleClickAsync` | `INCR campaign:{id}:clicks` + `SETEX session:{t}:{u}` TTL=30min | `UPSERT CampaignMetrics (Clicks)`; `INSERT INTO Events` |
+| 3 | `AddToCart` (attributed) | `AttributionHandler.HandleAddToCartAsync` | `INCR campaign:{id}:clickToBasket` | `UPSERT CampaignMetrics (ClickToBasket)` |
 | 4 | `AddToCart` (not attributed) | `AttributionHandler.HandleAddToCartAsync` | None (session not found → early return) | None |
-| 5 | `ProductView` | `default` (unhandled) | None | None |
-| 6 | `Purchase` | `default` (unhandled) | None | None |
+| 5 | `ProductView` | `default` (unhandled) | None | `INSERT INTO Events` (raw save) |
+| 6 | `Purchase` | `default` (unhandled) | None | `INSERT INTO Events` (raw save) |
 
 ### API Endpoint Summary
 

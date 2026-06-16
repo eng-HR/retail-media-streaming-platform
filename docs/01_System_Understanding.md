@@ -187,7 +187,7 @@ These are intentional scope boundaries — not design flaws:
 | **Apache Flink** | .NET BackgroundService sufficient for scope | Replace with Flink for exactly-once, event-time processing, backpressure handling |
 | **Data Lake (S3)** | Not required for API demo | Sink Kafka → S3 via Kafka Connect or Flink for raw event archival |
 | **BigQuery** | No analytics requirement in MVP | Stream aggregates → BigQuery for historical/BI queries |
-| **RedisFlushService** | Stub — cache-aside covers reads | Implement periodic flush: `SCAN` Redis keys → `UPSERT` PostgreSQL → `DEL` Redis |
+| **RedisFlushService** | Removed — replaced by write-along | Handlers now write to both Redis and PostgreSQL at event time. No periodic flush needed. |
 | **Purchase/ProductView handlers** | Not in API requirements | Add handlers if attribution models need them |
 | **Exactly-once processing** | Kafka with at-least-once + manual commit | Idempotent writes + transactional Kafka or Flink checkpoints |
 | **Authentication/Authorization** | Not in scope | Add JWT bearer auth + per-tenant API keys |

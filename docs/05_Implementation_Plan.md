@@ -166,7 +166,7 @@ graph TD
 - Kafka consumer reading raw-events
 - Event router → ClickHandler, ImpressionHandler, AttributionHandler
 - Click-to-basket attribution: Redis session state with attribution window
-- Periodic flush from Redis → PostgreSQL
+- Write-along persistence: Redis counters + PostgreSQL upserts at event time
 
 ### Phase 8: Testing
 - Unit tests: domain logic, service layer (xUnit + Moq)
@@ -203,7 +203,7 @@ graph TD
 
 - **Real-time vs Accuracy**: Redis counters for speed + nightly batch reconciliation for precision
 - **PostgreSQL vs Cassandra**: PG now (team familiarity, consistency), Cassandra if >100K writes/sec
-- **Redis as counter**: Fast but 8-byte loss window; flushed to PG every 30s
+- **Redis as counter**: Fast but 8-byte loss window; write-along to PG at event time
 - **Single DB per tenant vs shared**: Shared with tenantId column for cost; dedicated clusters for enterprise retailers
 - **Kafka partition skew**: Large campaigns may hotspot; mitigated by sub-partitions or randomized suffix
 

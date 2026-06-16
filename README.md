@@ -869,7 +869,7 @@ docker exec -it retail-redis redis-cli
 
 | Document | Description |
 |----------|-------------|
-| [`docs/Architecture_Diagrams.md`](docs/Architecture_Diagrams.md) | HLD, LLD, class diagrams, sequence diagrams |
-| [`docs/Use_Case_Walkthroughs.md`](docs/Use_Case_Walkthroughs.md) | End-to-end walkthroughs with dummy data for all event types |
-| [`docs/System_Understanding.md`](docs/System_Understanding.md) | How implementation maps to interview requirements, design decisions, limitations |
-| [`docs/Scope_For_Extension.md`](docs/Scope_For_Extension.md) | Production extensions: fan-in/fan-out, Flink, data lake, cost optimization, interview talking points |
+| [`docs/01_System_Understanding.md`](docs/01_System_Understanding.md) | How implementation maps to interview requirements, design decisions, limitations |
+| [`docs/02_Architecture_Diagrams.md`](docs/02_Architecture_Diagrams.md) | HLD, LLD, class diagrams, sequence diagrams |
+| [`docs/03_Use_Case_Walkthroughs.md`](docs/03_Use_Case_Walkthroughs.md) | End-to-end walkthroughs with dummy data for all event types |
+| [`docs/04_Scope_For_Extension.md`](docs/04_Scope_For_Extension.md) | Production extensions: fan-in/fan-out, Flink, data lake, cost optimization, interview talking points |
