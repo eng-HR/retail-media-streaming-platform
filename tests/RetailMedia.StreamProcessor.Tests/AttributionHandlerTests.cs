@@ -51,7 +51,7 @@ public class AttributionHandlerTests
 
         await _handler.HandleAddToCartAsync(addToCartEvent);
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:cmp_789:clickToBasket", 1), Times.Once);
+        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:cmp_789:clickToBasket", 1, It.IsAny<TimeSpan?>()), Times.Once);
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class AttributionHandlerTests
 
         await _handler.HandleAddToCartAsync(addToCartEvent);
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>()), Times.Never);
+        _cacheMock.Verify(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<TimeSpan?>()), Times.Never);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class AttributionHandlerTests
 
         await _handler.HandleAddToCartAsync(addToCartEvent);
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>()), Times.Never);
+        _cacheMock.Verify(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<TimeSpan?>()), Times.Never);
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public class AttributionHandlerTests
 
         await _handler.HandleAddToCartAsync(addToCartEvent);
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>()), Times.Never);
+        _cacheMock.Verify(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<TimeSpan?>()), Times.Never);
     }
 
     [Fact]
@@ -119,6 +119,6 @@ public class AttributionHandlerTests
 
         await _handler.HandleAddToCartAsync(addToCartEvent);
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:cmp_789:clickToBasket", 1), Times.Once);
+        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:cmp_789:clickToBasket", 1, It.IsAny<TimeSpan?>()), Times.Once);
     }
 }

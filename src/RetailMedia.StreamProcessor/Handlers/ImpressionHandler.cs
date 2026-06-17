@@ -19,7 +19,7 @@ public class ImpressionHandler
     public async Task HandleAsync(Event @event)
     {
         var redisKey = $"campaign:{@event.CampaignId}:impressions";
-        var count = await _cache.IncrementCounterAsync(redisKey);
+        var count = await _cache.IncrementCounterAsync(redisKey, expiry: TimeSpan.FromHours(24));
 
         var metric = new CampaignMetric(@event.TenantId, @event.CampaignId, MetricType.Impressions, 1, @event.Timestamp.Date);
         await _metricsRepo.UpsertMetricAsync(metric);

@@ -46,7 +46,7 @@ public class AttributionHandler
         }
 
         var redisKey = $"campaign:{@event.CampaignId}:clickToBasket";
-        await _cache.IncrementCounterAsync(redisKey);
+        await _cache.IncrementCounterAsync(redisKey, expiry: TimeSpan.FromHours(24));
 
         var metric = new CampaignMetric(@event.TenantId, @event.CampaignId, MetricType.ClickToBasket, 1, @event.Timestamp.Date);
         await _metricsRepo.UpsertMetricAsync(metric);

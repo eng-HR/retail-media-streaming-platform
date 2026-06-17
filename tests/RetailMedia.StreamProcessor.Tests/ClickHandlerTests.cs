@@ -30,18 +30,18 @@ public class ClickHandlerTests
 
         await _handler.HandleAsync(clickEvent);
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:cmp_789:clicks", 1), Times.Once);
+        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:cmp_789:clicks", 1, It.IsAny<TimeSpan?>()), Times.Once);
     }
 
     [Fact]
     public async Task HandleAsync_ReturnsCorrectCount()
     {
-        _cacheMock.Setup(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>())).ReturnsAsync(5);
+        _cacheMock.Setup(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<TimeSpan?>())).ReturnsAsync(5);
         var clickEvent = new Event("evt_002", TenantId, "user_2", CampaignId, EventType.AdClick, DateTime.UtcNow, null);
 
         await _handler.HandleAsync(clickEvent);
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>()), Times.Once);
+        _cacheMock.Verify(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<TimeSpan?>()), Times.Once);
     }
 
     [Fact]
@@ -52,6 +52,6 @@ public class ClickHandlerTests
 
         await _handler.HandleAsync(clickEvent);
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:camp_xyz:clicks", 1), Times.Once);
+        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:camp_xyz:clicks", 1, It.IsAny<TimeSpan?>()), Times.Once);
     }
 }

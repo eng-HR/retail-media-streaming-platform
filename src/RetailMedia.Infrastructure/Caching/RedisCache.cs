@@ -15,8 +15,13 @@ public class RedisCache : IRedisCache, IDisposable
         _db = _redis.GetDatabase();
     }
 
-    public async Task<long> IncrementCounterAsync(string key, long value = 1) =>
-        await _db.StringIncrementAsync(key, value);
+    public async Task<long> IncrementCounterAsync(string key, long value = 1, TimeSpan? expiry = null)
+    {
+        var count = await _db.StringIncrementAsync(key, value);
+        if (expiry.HasValue)
+            await _db.KeyExpireAsync(key, expiry.Value);
+        return count;
+    }
 
     public async Task<long> GetCounterAsync(string key)
     {

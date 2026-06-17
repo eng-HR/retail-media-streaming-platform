@@ -30,7 +30,7 @@ public class ImpressionHandlerTests
 
         await _handler.HandleAsync(impressionEvent);
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:cmp_789:impressions", 1), Times.Once);
+        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:cmp_789:impressions", 1, It.IsAny<TimeSpan?>()), Times.Once);
     }
 
     [Fact]
@@ -41,13 +41,13 @@ public class ImpressionHandlerTests
 
         await _handler.HandleAsync(impressionEvent);
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:camp_xyz:impressions", 1), Times.Once);
+        _cacheMock.Verify(c => c.IncrementCounterAsync("campaign:camp_xyz:impressions", 1, It.IsAny<TimeSpan?>()), Times.Once);
     }
 
     [Fact]
     public async Task HandleAsync_MultipleEvents_AccumulatesCount()
     {
-        _cacheMock.SetupSequence(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>()))
+        _cacheMock.SetupSequence(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<TimeSpan?>()))
             .ReturnsAsync(1)
             .ReturnsAsync(2)
             .ReturnsAsync(3);
@@ -58,6 +58,6 @@ public class ImpressionHandlerTests
         await _handler.HandleAsync(new Event("evt_013", TenantId, "user_3", CampaignId, EventType.AdImpression, DateTime.UtcNow, null));
         await _handler.HandleAsync(new Event("evt_014", TenantId, "user_3", CampaignId, EventType.AdImpression, DateTime.UtcNow, null));
 
-        _cacheMock.Verify(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>()), Times.Exactly(3));
+        _cacheMock.Verify(c => c.IncrementCounterAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<TimeSpan?>()), Times.Exactly(3));
     }
 }
