@@ -873,3 +873,5 @@ docker exec -it retail-redis redis-cli
 | [`docs/02_Architecture_Diagrams.md`](docs/02_Architecture_Diagrams.md) | HLD, LLD, class diagrams, sequence diagrams |
 | [`docs/03_Use_Case_Walkthroughs.md`](docs/03_Use_Case_Walkthroughs.md) | End-to-end walkthroughs with dummy data for all event types |
 | [`docs/04_Scope_For_Extension.md`](docs/04_Scope_For_Extension.md) | Production extensions: fan-in/fan-out, Flink, data lake, cost optimization, interview talking points |
+| [`docs/05_Implementation_Plan.md`](docs/05_Implementation_Plan.md) | Original implementation plan with phases and trade-offs |
+| [`docs/06_Clean_Architecture_Deep_Dive.md`](docs/06_Clean_Architecture_Deep_Dive.md) | Layer-by-layer explanation with concrete code examples — Domain → Application → Infrastructure → Presentation |
