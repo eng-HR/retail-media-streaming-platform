@@ -19,26 +19,33 @@ public class InsightsService : IInsightsService
 
     public async Task<ClickResponse> GetClicksAsync(CampaignId campaignId, TenantId tenantId, CancellationToken ct = default)
     {
-        var redisKey = $"campaign:{campaignId}:clicks";
-        var redisCount = await _cache.GetCounterAsync(redisKey);
-        var dbCount = await _metricsRepo.GetClickCountAsync(campaignId, tenantId, ct);
-        return new ClickResponse(campaignId.ToString(), redisCount + dbCount, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var count = await ReadLiveCountAsync(
+            $"campaign:{campaignId}:clicks",
+            () => _metricsRepo.GetClickCountAsync(campaignId, tenantId, ct));
+        return new ClickResponse(campaignId.ToString(), count, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
     }
 
     public async Task<ImpressionResponse> GetImpressionsAsync(CampaignId campaignId, TenantId tenantId, CancellationToken ct = default)
     {
-        var redisKey = $"campaign:{campaignId}:impressions";
-        var redisCount = await _cache.GetCounterAsync(redisKey);
-        var dbCount = await _metricsRepo.GetImpressionCountAsync(campaignId, tenantId, ct);
-        return new ImpressionResponse(campaignId.ToString(), redisCount + dbCount, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var count = await ReadLiveCountAsync(
+            $"campaign:{campaignId}:impressions",
+            () => _metricsRepo.GetImpressionCountAsync(campaignId, tenantId, ct));
+        return new ImpressionResponse(campaignId.ToString(), count, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
     }
 
     public async Task<ClickToBasketResponse> GetClickToBasketAsync(CampaignId campaignId, TenantId tenantId, CancellationToken ct = default)
     {
-        var redisKey = $"campaign:{campaignId}:clickToBasket";
-        var redisCount = await _cache.GetCounterAsync(redisKey);
-        var dbCount = await _metricsRepo.GetClickToBasketCountAsync(campaignId, tenantId, ct);
-        return new ClickToBasketResponse(campaignId.ToString(), redisCount + dbCount, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var count = await ReadLiveCountAsync(
+            $"campaign:{campaignId}:clickToBasket",
+            () => _metricsRepo.GetClickToBasketCountAsync(campaignId, tenantId, ct));
+        return new ClickToBasketResponse(campaignId.ToString(), count, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+    }
+
+    private async Task<long> ReadLiveCountAsync(string redisKey, Func<Task<long>> dbFallback)
+    {
+        if (await _cache.KeyExistsAsync(redisKey))
+            return await _cache.GetCounterAsync(redisKey);
+        return await dbFallback();
     }
 
     public async Task<MetricsResponse> GetMetricsAsync(CampaignId campaignId, TenantId tenantId,

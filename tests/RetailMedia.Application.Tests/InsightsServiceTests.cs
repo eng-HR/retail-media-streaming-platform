@@ -24,43 +24,73 @@ public class InsightsServiceTests
     }
 
     [Fact]
-    public async Task GetClicksAsync_ReturnsSumOfRedisAndDbCounts()
+    public async Task GetClicksAsync_RedisHit_ReturnsRedisCountOnly()
     {
-        _cacheMock.Setup(c => c.GetCounterAsync(It.IsAny<string>()))
-            .ReturnsAsync(100);
-        _metricsRepoMock.Setup(r => r.GetClickCountAsync(CampaignId, TenantId, default))
-            .ReturnsAsync(50);
+        _cacheMock.Setup(c => c.KeyExistsAsync(It.IsAny<string>())).ReturnsAsync(true);
+        _cacheMock.Setup(c => c.GetCounterAsync(It.IsAny<string>())).ReturnsAsync(100);
 
         var result = await _service.GetClicksAsync(CampaignId, TenantId);
 
-        Assert.Equal(150, result.Clicks);
+        Assert.Equal(100, result.Clicks);
         Assert.Equal("cmp_789", result.CampaignId);
+        _metricsRepoMock.Verify(
+            r => r.GetClickCountAsync(It.IsAny<CampaignId>(), It.IsAny<TenantId>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task GetImpressionsAsync_ReturnsSumOfRedisAndDbCounts()
+    public async Task GetClicksAsync_RedisMiss_FallsBackToDb()
     {
-        _cacheMock.Setup(c => c.GetCounterAsync(It.IsAny<string>()))
-            .ReturnsAsync(200);
-        _metricsRepoMock.Setup(r => r.GetImpressionCountAsync(CampaignId, TenantId, default))
-            .ReturnsAsync(75);
+        _cacheMock.Setup(c => c.KeyExistsAsync(It.IsAny<string>())).ReturnsAsync(false);
+        _metricsRepoMock.Setup(r => r.GetClickCountAsync(CampaignId, TenantId, default)).ReturnsAsync(50);
+
+        var result = await _service.GetClicksAsync(CampaignId, TenantId);
+
+        Assert.Equal(50, result.Clicks);
+    }
+
+    [Fact]
+    public async Task GetImpressionsAsync_RedisHit_ReturnsRedisCountOnly()
+    {
+        _cacheMock.Setup(c => c.KeyExistsAsync(It.IsAny<string>())).ReturnsAsync(true);
+        _cacheMock.Setup(c => c.GetCounterAsync(It.IsAny<string>())).ReturnsAsync(200);
 
         var result = await _service.GetImpressionsAsync(CampaignId, TenantId);
 
-        Assert.Equal(275, result.Impressions);
+        Assert.Equal(200, result.Impressions);
     }
 
     [Fact]
-    public async Task GetClickToBasketAsync_ReturnsSumOfRedisAndDbCounts()
+    public async Task GetImpressionsAsync_RedisMiss_FallsBackToDb()
     {
-        _cacheMock.Setup(c => c.GetCounterAsync(It.IsAny<string>()))
-            .ReturnsAsync(30);
-        _metricsRepoMock.Setup(r => r.GetClickToBasketCountAsync(CampaignId, TenantId, default))
-            .ReturnsAsync(10);
+        _cacheMock.Setup(c => c.KeyExistsAsync(It.IsAny<string>())).ReturnsAsync(false);
+        _metricsRepoMock.Setup(r => r.GetImpressionCountAsync(CampaignId, TenantId, default)).ReturnsAsync(75);
+
+        var result = await _service.GetImpressionsAsync(CampaignId, TenantId);
+
+        Assert.Equal(75, result.Impressions);
+    }
+
+    [Fact]
+    public async Task GetClickToBasketAsync_RedisHit_ReturnsRedisCountOnly()
+    {
+        _cacheMock.Setup(c => c.KeyExistsAsync(It.IsAny<string>())).ReturnsAsync(true);
+        _cacheMock.Setup(c => c.GetCounterAsync(It.IsAny<string>())).ReturnsAsync(30);
 
         var result = await _service.GetClickToBasketAsync(CampaignId, TenantId);
 
-        Assert.Equal(40, result.ClickToBasket);
+        Assert.Equal(30, result.ClickToBasket);
+    }
+
+    [Fact]
+    public async Task GetClickToBasketAsync_RedisMiss_FallsBackToDb()
+    {
+        _cacheMock.Setup(c => c.KeyExistsAsync(It.IsAny<string>())).ReturnsAsync(false);
+        _metricsRepoMock.Setup(r => r.GetClickToBasketCountAsync(CampaignId, TenantId, default)).ReturnsAsync(10);
+
+        var result = await _service.GetClickToBasketAsync(CampaignId, TenantId);
+
+        Assert.Equal(10, result.ClickToBasket);
     }
 
     [Fact]

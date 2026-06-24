@@ -220,6 +220,8 @@ s3://retail-media-data-lake/
 
 **Why GETSET instead of GET+DEL:** Atomicity — no lost counts between the read and reset.
 
+**Durability caveat:** with periodic flush the un-flushed delta lives *only* in Redis — a crash (or TTL expiry) before the next flush loses it unless it can be replayed from Kafka. Write-along avoids this by persisting every event to PostgreSQL immediately, which is why it remains the default; the flush is a throughput optimization, not a free win.
+
 ### 4.2 Event Handlers for All Types
 
 **Current gap:** `ProductView` and `Purchase` events hit the `default` case and are silently dropped.
@@ -252,32 +254,40 @@ Purchase handling would require a more sophisticated attribution model:
 2. **Flink exactly-once:** Flink's Kafka connector supports exactly-once via two-phase commit (checkpoint barriers → transactional Kafka producers)
 3. **Transactional outbox:** EventCollector writes events to PostgreSQL first, then a separate process publishes to Kafka. If Kafka fails, the event is still in the outbox for retry
 
-### 4.4 Enhanced Metrics Endpoint
+### 4.4 Read Strategy — Cache-Aside (Redis → PostgreSQL)
 
-**Current gap:** `GET /ad/{id}/metrics` only queries PostgreSQL — it misses real-time Redis counters.
+**Implemented.** The real-time count endpoints (`/clicks`, `/impressions`, `/clickToBasket`) serve the live value from Redis when the counter key exists, and fall back to the durable PostgreSQL aggregate on a cache miss. The two stores are **never summed** — write-along keeps both current, so each already holds the full count; reading one source avoids double counting.
 
-**Fix:**
 ```csharp
-public async Task<MetricsResponse> GetMetricsAsync(...)
+// InsightsService — one source per request, never redis + db
+private async Task<long> ReadLiveCountAsync(string redisKey, Func<Task<long>> dbFallback)
 {
-    // Same as today — query PostgreSQL with filters
-    var dbMetrics = await _metricsRepo.GetMetricsAsync(...);
-
-    // NEW: Add Redis counters for the same period
-    // (Redis doesn't have date filtering, so we return the raw counter
-    //  and let the consumer decide)
-    var redisClicks = await _cache.GetCounterAsync("campaign:{id}:clicks");
-    var redisImpressions = await _cache.GetCounterAsync("campaign:{id}:impressions");
-    var redisClickToBasket = await _cache.GetCounterAsync("campaign:{id}:clickToBasket");
-
-    return new MetricsResponse(
-        campaignId.ToString(),
-        (dbClicks ?? 0) + redisClicks,       // combined
-        (dbImpressions ?? 0) + redisImpressions,
-        (dbClickToBasket ?? 0) + redisClickToBasket,
-        startDate, endDate);
+    if (await _cache.KeyExistsAsync(redisKey))
+        return await _cache.GetCounterAsync(redisKey);  // hot path: live counter
+    return await dbFallback();                            // miss → PostgreSQL (source of truth)
 }
 ```
+
+**Why one source, not `redis + db`:** earlier the endpoints returned `redisCount + dbCount`, which double counted every event (it lived in both stores). PostgreSQL is the durable source of truth; Redis is a disposable accelerator — losing it degrades to a slower DB read, never to lost data.
+
+| Endpoint | Hot path | Fallback / source of truth |
+|----------|----------|----------------------------|
+| `/clicks`, `/impressions`, `/clickToBasket` | Redis counter | PostgreSQL `SUM` on cache miss |
+| `/metrics` (aggregate, date-range) | — | PostgreSQL only (Redis has no time dimension) |
+
+#### Planned (not yet implemented): optional date-time filter on count endpoints
+
+Add optional `from` / `to` query parameters so callers can request a historical window, not just the live total:
+
+```
+GET /ad/{id}/clicks?from=2026-06-01&to=2026-06-16
+```
+
+Routing rule:
+- **No date filter** → live read (Redis → PostgreSQL fallback), as today.
+- **Date filter present** → always a PostgreSQL range query over `CampaignMetrics` (filter by `Date`), because Redis only holds the live/aggregate value with no time dimension.
+
+This keeps the fast path for the common "how many right now" query while enabling point-in-time / historical reporting through the durable store.
 
 ### 4.5 Authentication & Authorization
 
