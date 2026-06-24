@@ -38,9 +38,9 @@ services:
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://127.0.0.1:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,CONTROLLER://127.0.0.1:9093
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092,CONTROLLER://127.0.0.1:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_LOG_RETENTION_HOURS: 168
@@ -61,7 +61,7 @@ services:
     environment:
       ConnectionStrings__DefaultConnection: "Host=postgres;Database=retail_media;Username=retail;Password=retail123"
       Redis__ConnectionString: "redis:6379"
-      Kafka__BootstrapServers: "kafka:9092"
+      Kafka__BootstrapServers: "kafka:29092"
 
   processor:
     build:
@@ -78,7 +78,7 @@ services:
     environment:
       ConnectionStrings__DefaultConnection: "Host=postgres;Database=retail_media;Username=retail;Password=retail123"
       Redis__ConnectionString: "redis:6379"
-      Kafka__BootstrapServers: "kafka:9092"
+      Kafka__BootstrapServers: "kafka:29092"
 
   collector:
     build:
@@ -91,7 +91,7 @@ services:
       kafka:
         condition: service_started
     environment:
-      Kafka__BootstrapServers: "kafka:9092"
+      Kafka__BootstrapServers: "kafka:29092"
 
 volumes:
   pgdata:
