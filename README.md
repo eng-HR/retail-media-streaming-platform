@@ -514,7 +514,7 @@ metrics:
 ```bash
 docker-compose up -d postgres redis kafka   # Start dependencies
 make run-api                                 # http://localhost:5000 (insights)
-make run-collector                           # http://localhost:5001 (ingestion)
+make run-collector                           # http://localhost:5229 (ingestion)
 make run-processor                           # Background worker (no port)
 # OR
 make dev                                     # All at once
@@ -619,11 +619,13 @@ make docker-up
 
 ## End-to-End Test Walkthrough
 
+> **Ports below assume Docker (`make docker-up`):** API on `5000`, EventCollector on `5001`. If you instead run services locally with `make run-*`, the EventCollector listens on `5229`.
+
 ### 1. Verify all services are healthy
 
 ```bash
 curl http://localhost:5000/healthz       # → Healthy
-curl http://localhost:5229/healthz       # → Healthy
+curl http://localhost:5001/healthz       # → Healthy
 ```
 
 ### 2. Ingest events (the full funnel)
@@ -632,22 +634,22 @@ Open a terminal and send these events in order:
 
 ```bash
 # AdClick — starts a 30-min attribution session
-curl -X POST http://localhost:5229/events \
+curl -X POST http://localhost:5001/events \
   -H "Content-Type: application/json" \
   -d '{"eventId":"e2e_001","tenantId":"tesco","userId":"alice","campaignId":"cmp_summer","eventType":"AdClick","timestamp":"2026-06-16T10:00:00Z"}'
 
 # AdImpression — counts an impression
-curl -X POST http://localhost:5229/events \
+curl -X POST http://localhost:5001/events \
   -H "Content-Type: application/json" \
   -d '{"eventId":"e2e_002","tenantId":"tesco","userId":"alice","campaignId":"cmp_summer","eventType":"AdImpression","timestamp":"2026-06-16T10:01:00Z"}'
 
 # AddToCart — within 30 min → attributed to the click
-curl -X POST http://localhost:5229/events \
+curl -X POST http://localhost:5001/events \
   -H "Content-Type: application/json" \
   -d '{"eventId":"e2e_003","tenantId":"tesco","userId":"alice","campaignId":"cmp_summer","eventType":"AddToCart","timestamp":"2026-06-16T10:15:00Z"}'
 
 # ProductView — recorded but no special processing
-curl -X POST http://localhost:5229/events \
+curl -X POST http://localhost:5001/events \
   -H "Content-Type: application/json" \
   -d '{"eventId":"e2e_004","tenantId":"tesco","userId":"alice","campaignId":"cmp_summer","eventType":"ProductView","timestamp":"2026-06-16T10:20:00Z"}'
 ```
@@ -731,12 +733,12 @@ docker exec retail-kafka kafka-consumer-groups \
 
 ```bash
 # Click at 09:00
-curl -X POST http://localhost:5229/events \
+curl -X POST http://localhost:5001/events \
   -H "Content-Type: application/json" \
   -d '{"eventId":"e2e_exp_01","tenantId":"tesco","userId":"bob","campaignId":"cmp_autumn","eventType":"AdClick","timestamp":"2026-06-16T09:00:00Z"}'
 
 # AddToCart at 10:00 (60 min later — session expired)
-curl -X POST http://localhost:5229/events \
+curl -X POST http://localhost:5001/events \
   -H "Content-Type: application/json" \
   -d '{"eventId":"e2e_exp_02","tenantId":"tesco","userId":"bob","campaignId":"cmp_autumn","eventType":"AddToCart","timestamp":"2026-06-16T10:00:00Z"}'
 
