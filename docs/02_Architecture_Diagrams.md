@@ -67,6 +67,8 @@ graph TB
 | 6a | RetailMedia.Api | Redis | Reads real-time counter values |
 | 6b | RetailMedia.Api | PostgreSQL | Reads persisted aggregate metrics with date filters |
 
+> **Database schema & events mapping:** see [`07_Database_Schema.md`](./07_Database_Schema.md) for the ER diagram, table/column definitions, type mappings, and the full EventType → Redis/CampaignMetrics mapping.
+
 ---
 
 ## 2. Low-Level Design (LLD)
